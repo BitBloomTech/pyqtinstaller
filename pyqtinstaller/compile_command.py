@@ -7,7 +7,6 @@ import os
 from os import path
 from configparser import ConfigParser
 import shutil
-from distutils.version import StrictVersion
 from glob import glob
 
 from setuptools import Command
@@ -55,7 +54,7 @@ def get_python_version(python_dir):
     """Gets the version of python that is being used to compile
     """
     version_string = check_output([path.join(python_dir, 'python.exe'), '--version']).decode('utf8')
-    version = StrictVersion(version_string.replace('Python', '').strip()).version
+    version = version_string.replace('Python', '').strip().split('.')
     return {'major': version[0], 'minor': version[1], 'patch': version[2]}
 
 

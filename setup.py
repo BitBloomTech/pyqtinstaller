@@ -8,7 +8,6 @@ setup(
     extras_require={
         'dev': ['tox']
     },
-    setup_requires=['setuptools-lint'],
     entry_points={
         'distutils.commands': [
             'compile = pyqtinstaller:CompileCommand'
