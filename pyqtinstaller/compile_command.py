@@ -8,18 +8,19 @@ from os import path
 from configparser import ConfigParser
 import shutil
 from glob import glob
+from typing import Sequence
 
 from setuptools import Command
 from jinja2 import Template
 
-def assert_call(cmd, **kwargs):
+def assert_call(cmd: Sequence[str], **kwargs):
     """Wraps `subprocess.call` in an assert
     """
     result = call(cmd, **kwargs)
     assert not result, \
         '{} exited with code {} - see output for details'.format(' '.join(cmd), result)
 
-def get_vc_env(vc_dir, platform):
+def get_vc_env(vc_dir: str, platform: str):
     """Gets the environment variables to be used when compiling using visual studio c++ compiler
     """
     vcvars = check_output(['cmd', '/c', f'vcvarsall.bat {platform}&set'], cwd=vc_dir).decode('utf8')
@@ -30,19 +31,21 @@ def get_vc_env(vc_dir, platform):
     vc_env['Path'] = '{};{}'.format(get_vc_bin_dir(vc_dir, platform), vc_env['Path'])
     return vc_env
 
-def get_vc_bin_dir(vc_dir, platform):
+def get_vc_bin_dir(vc_dir: str, platform: str):
     """Gets visual c++ compiler binary directory (changes depending on platform)
     """
     bin_dir = 'bin' if platform == 'x86' else path.join('bin', platform)
     return path.join(vc_dir, bin_dir)
 
-def get_version(package):
+
+def get_version(package: str):
     """Gets the version of the package we're building
     """
     exec(f'import {package}') #pylint: disable=exec-used
     return eval(f'{package}.__version__') #pylint: disable=eval-used
 
-def get_template(name):
+
+def get_template(name: str) -> Template:
     """Loads a jinja template from the name of the template file
     """
     template_path = path.join(path.realpath(path.dirname(__file__)), f'{name}.jinja')
@@ -50,7 +53,7 @@ def get_template(name):
         return Template(fp.read())
 
 
-def get_python_version(python_dir):
+def get_python_version(python_dir: str):
     """Gets the version of python that is being used to compile
     """
     version_string = check_output([path.join(python_dir, 'python.exe'), '--version']).decode('utf8')
