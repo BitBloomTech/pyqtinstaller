@@ -113,6 +113,7 @@ class CompileCommand(Command):
         self.build_dir = None
         self.resources_dir = None
         self.win_console = False
+        self.languages = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -144,6 +145,7 @@ class CompileCommand(Command):
         assert not self.resources_dir or path.isdir(self.resources_dir),\
             'Resources directory provided is not a directory'
         self.qt_modules = self.qt_modules.split(',')
+        self.languages = [] if not self.languages else self.languages.split(',')
         self.win_console =\
             self.win_console.lower() in ['1', 'true', 't', 'yes'] if self.win_console\
             else False
@@ -178,6 +180,10 @@ class CompileCommand(Command):
         # Build the qt project file
         self._run_pyqtdeploy(vc_env)
 
+        # Generate translations
+        self._generate_ts(vc_env)
+        self._generate_qm(vc_env)
+
         # Build the nmake Makefiles
         self._run_qmake(vc_env)
 
@@ -200,7 +206,8 @@ class CompileCommand(Command):
             'qt_modules': self.qt_modules,
             'build_dir': self.build_dir,
             'python_version': get_python_version(self.python_dir),
-            'win_console': '1' if self.win_console else '0'
+            'win_console': '1' if self.win_console else '0',
+            'translation_files': self._get_translation_files()
         }
         with open(f'{self.package}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
@@ -216,7 +223,7 @@ class CompileCommand(Command):
             os.makedirs(app_resources_dir)
 
         with open(path.join(app_resources_dir, 'app_resources.qrc'), 'w') as fp:
-            fp.write(get_template('app_resources.qrc').render(args))
+            fp.write(get_template('resources.qrc').render(args))
         for resource_file in app_resource_files:
             dest = path.join(self.build_dir, 'app_resources', resource_file)
             if not path.isdir(path.dirname(dest)):
@@ -229,6 +236,43 @@ class CompileCommand(Command):
             if not path.isdir(path.dirname(dest)):
                 os.makedirs(path.dirname(dest))
             shutil.copyfile(resource_file, dest)
+
+
+    def _generate_ts(self, env):
+        if self.languages:
+            if not path.isdir('translations'):
+                os.makedirs('translations')
+            qmake_dir = path.dirname(self.qmake_path)
+            assert_call([
+                path.join(qmake_dir, 'lupdate'),
+                '-verbose',
+                self.package,
+                '-ts'
+            ] + self._get_translation_files(), env=env)
+            dest = path.join(self.build_dir, 'translations')
+            if os.path.exists(dest):
+                shutil.rmtree(dest)
+            shutil.copytree('translations', dest)
+
+    
+    def _generate_qm(self, env):
+        qmake_dir = path.dirname(self.qmake_path)
+        assert_call([
+            path.join(qmake_dir, 'lrelease'),
+            '-verbose',
+            path.join(self.build_dir, '{}.pro'.format(self.app_name.replace(' ', '')))
+        ], env=env)
+        
+        qm_files = glob(path.join(self.build_dir, 'translations', '*.qm'))
+        dest = path.join(self.build_dir, 'release', 'translations')
+        if not path.isdir(dest):
+            os.makedirs(dest)
+        for qm_file in qm_files:
+            shutil.copy(qm_file, dest)
+
+
+    def _get_translation_files(self):
+        return [f'translations/{self.package}_{lang}.ts' for lang in self.languages]
 
 
     def _get_vc_env(self):

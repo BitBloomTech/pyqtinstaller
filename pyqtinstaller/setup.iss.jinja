@@ -32,6 +32,7 @@ Source: "{{exe_filename}}"; DestDir: "{app}"; DestName: "{{exe_filename}}"
 Source: "*.dll"; DestDir: "{app}"
 Source: "*.pyd"; DestDir: "{app}"
 Source: "{{resources_dir}}\{{app_icon}}"; DestDir: "{app}\{{resources_dir}}";
+Source: "translations\*.qm"; DestDir: "{app}\translations";
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
