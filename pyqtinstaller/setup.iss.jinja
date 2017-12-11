@@ -14,7 +14,7 @@ DefaultGroupName={{app_name}}
 UninstallDisplayIcon={app}\{{exe_filename}}
 Compression=lzma2
 SolidCompression=yes
-OutputBaseFilename={{app_name}}_{{app_version}}_{{platform}}
+OutputBaseFilename={{app_name.replace(' ', '')}}_{{app_version}}_{{platform}}
 OutputDir=.
 ; "ArchitecturesAllowed=x64" specifies that Setup cannot run on
 ; anything but x64.
@@ -26,17 +26,28 @@ ArchitecturesInstallIn64BitMode=x64
 
 [CustomMessages]
 CreateStartMenuIcon=Create a &start menu icon
+InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [Files]
+; App Files
 Source: "{{exe_filename}}"; DestDir: "{app}"; DestName: "{{exe_filename}}"
 Source: "*.dll"; DestDir: "{app}"
 Source: "*.pyd"; DestDir: "{app}"
+Source: "platforms\*.dll"; DestDir: "{app}\platforms"
+; Resources
 Source: "{{resources_dir}}\{{app_icon}}"; DestDir: "{app}\{{resources_dir}}";
 Source: "translations\*.qm"; DestDir: "{app}\translations";
+; QML
+Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
+; Externals
+Source: "{{vc_redist_dir}}\vc_redist.x64.exe"; DestDir: {tmp}; Flags: deleteafterinstall
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[Run]
+Filename: {tmp}\vc_redist.x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
 
 [Icons]
 Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{exe_filename}}"; IconFilename: "{app}\{{resources_dir}}\{{app_icon}}"; Tasks: desktopicon

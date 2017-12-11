@@ -114,6 +114,8 @@ class CompileCommand(Command):
         self.resources_dir = None
         self.win_console = False
         self.languages = None
+        self.vc_redist_dir = None
+        self.qtquick_modules = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -144,7 +146,9 @@ class CompileCommand(Command):
         assert path.isdir(self.package), 'package not found'
         assert not self.resources_dir or path.isdir(self.resources_dir),\
             'Resources directory provided is not a directory'
+        assert path.isdir(self.vc_redist_dir), 'vc_redist_dir not found'
         self.qt_modules = self.qt_modules.split(',')
+        self.qtquick_modules = self.qtquick_modules.split(',') if self.qtquick_modules else []
         self.languages = [] if not self.languages else self.languages.split(',')
         self.win_console =\
             self.win_console.lower() in ['1', 'true', 't', 'yes'] if self.win_console\
@@ -157,9 +161,13 @@ class CompileCommand(Command):
             'app_version': get_version(self.package),
             'exe_filename': f'{self.package}.exe',
             'platform': self.platform,
-            'app_name': self.app_name.replace(' ', ''),
+            'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dir': self.resources_dir
+        }
+
+        self.externals_config = {
+            'vc_redist_dir': path.join(self.vc_redist_dir, 'vc14')
         }
 
         self._save_compile_user_config()
@@ -192,6 +200,9 @@ class CompileCommand(Command):
 
         dest = path.join(self.build_dir, 'release')
 
+        # Copy the qml files
+        self._copy_qml(dest)
+
         # Copy the dlls to the release directory
         self._copy_binaries(dest)
 
@@ -199,9 +210,19 @@ class CompileCommand(Command):
         self._build_installer(dest)
 
 
+    @property
+    def _qt_dir(self):
+        return path.dirname(self.qmake_path)
+
+
+    @property
+    def _project_name(self):
+        return self.app_name.replace(' ', '')
+
+
     def _build_project_file(self):
         args = {
-            'app_name': self.app_name.replace(' ', ''),
+            'project_name': self._project_name,
             'package': self.package,
             'qt_modules': self.qt_modules,
             'build_dir': self.build_dir,
@@ -209,7 +230,7 @@ class CompileCommand(Command):
             'win_console': '1' if self.win_console else '0',
             'translation_files': self._get_translation_files()
         }
-        with open(f'{self.package}.pdy', 'w') as fp:
+        with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
 
 
@@ -242,9 +263,8 @@ class CompileCommand(Command):
         if self.languages:
             if not path.isdir('translations'):
                 os.makedirs('translations')
-            qmake_dir = path.dirname(self.qmake_path)
             assert_call([
-                path.join(qmake_dir, 'lupdate'),
+                path.join(self._qt_dir, 'lupdate'),
                 '-verbose',
                 self.package,
                 '-ts'
@@ -254,15 +274,14 @@ class CompileCommand(Command):
                 shutil.rmtree(dest)
             shutil.copytree('translations', dest)
 
-    
+
     def _generate_qm(self, env):
-        qmake_dir = path.dirname(self.qmake_path)
         assert_call([
-            path.join(qmake_dir, 'lrelease'),
+            path.join(self._qt_dir, 'lrelease'),
             '-verbose',
-            path.join(self.build_dir, '{}.pro'.format(self.app_name.replace(' ', '')))
+            path.join(self.build_dir, f'{self._project_name}.pro')
         ], env=env)
-        
+
         qm_files = glob(path.join(self.build_dir, 'translations', '*.qm'))
         dest = path.join(self.build_dir, 'release', 'translations')
         if not path.isdir(dest):
@@ -304,16 +323,59 @@ class CompileCommand(Command):
         )
 
     def _build_installer(self, dest):
-        setup_script = get_template('setup.iss').render(**self.app_config)
+        setup_script = get_template('setup.iss').render({
+            **self.app_config,
+            **self.externals_config
+        })
 
         with open(path.join(dest, 'setup.iss'), 'w') as fp:
             fp.write(setup_script)
 
         assert_call([self.inno_setup_path, fp.name])
 
+    def _copy_qml(self, dest):
+        qml_dest = path.join(dest, 'qml')
+        if path.isdir(qml_dest):
+            shutil.rmtree(qml_dest)
+
+        os.makedirs(qml_dest)
+
+        for module in self.qtquick_modules:
+            qml_dir = path.join(self._qt_dir, '..', 'qml')
+            module_src = path.join(qml_dir, module)
+            exclude_endswith = ['d.dll', '.pdb']
+            for module_file in glob(f'{module_src}/**/*', recursive=True):
+                if path.isfile(module_file) and any(module_file.endswith, exclude_endswith):
+                    dest = path.join(qml_dest, path.relpath(module_file, qml_dir))
+                    if not path.isdir(path.dirname(dest)):
+                        os.makedirs(path.dirname(dest))
+                    shutil.copyfile(module_file, dest)
+
+
     def _copy_binaries(self, dest):
+        # Copy the dll paths we know about
         for dll_path in self._get_dll_paths():
             shutil.copyfile(dll_path, path.join(dest, path.basename(dll_path)))
+
+        # Copy the qwindows.dll file
+        platforms_dir = path.join(self._qt_dir, '..', 'plugins', 'platforms')
+        dest_platforms_dir = path.join(dest, 'platforms')
+        if not path.isdir(dest_platforms_dir):
+            os.makedirs(dest_platforms_dir)
+        shutil.copyfile(
+            path.join(platforms_dir, 'qwindows.dll'),
+            path.join(dest_platforms_dir, 'qwindows.dll')
+        )
+
+        # Run windeployqt
+        qml_dir = path.join(self._qt_dir, '..', 'qml')
+        app_binary = path.join(dest, f'{self._project_name}.exe')
+        assert_call([
+            path.join(self._qt_dir, 'windeployqt'),
+            '--release',
+            '--qmldir', qml_dir,
+            app_binary
+        ])
 
     def _save_compile_user_config(self):
         config = ConfigParser()
@@ -338,12 +400,11 @@ class CompileCommand(Command):
             path.join(p, f'{m}.dll') for p, m in zip(self._get_pyqt_lib_paths(), self.qt_modules)
         ]
         sip_dll = path.join(self._get_sip_lib_path(), 'sip.pyd')
-        qt_dll_base = path.dirname(self.qmake_path)
         qt_dll_modules = self.qt_modules
         if 'QtQuick' in qt_dll_modules:
             qt_dll_modules = qt_dll_modules + ['QtQuickControls2', 'QtQuickTemplates2']
         qt_dlls = [
-            path.join(qt_dll_base, m.replace('Qt', 'Qt5') + '.dll')\
+            path.join(self._qt_dir, m.replace('Qt', 'Qt5') + '.dll')\
                 for m in qt_dll_modules if m != 'Qt'
         ]
         python_dlls = [path.join(self.python_dir, f'{d}.dll') for d in ['python3', 'python36']]
