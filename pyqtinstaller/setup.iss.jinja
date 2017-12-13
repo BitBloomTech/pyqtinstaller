@@ -39,6 +39,7 @@ Source: "{{resources_dir}}\{{app_icon}}"; DestDir: "{app}\{{resources_dir}}";
 Source: "translations\*.qm"; DestDir: "{app}\translations";
 ; QML
 Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
+Source: {{package}}\*; DestDir: "{app}\{{package}}; Flags: recursesubdirs
 ; Externals
 Source: "{{vc_redist_dir}}\vc_redist.x64.exe"; DestDir: {tmp}; Flags: deleteafterinstall
 

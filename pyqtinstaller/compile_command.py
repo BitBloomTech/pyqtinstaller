@@ -3,6 +3,7 @@
 This module defines the "compile" command, which will compile an installer from a pyqt5 application
 """
 from subprocess import call, check_output
+import sys
 import os
 from os import path
 from configparser import ConfigParser
@@ -61,6 +62,10 @@ def get_python_version(python_dir: str):
     return {'major': version[0], 'minor': version[1], 'patch': version[2]}
 
 
+def to_str_list(comma_delimited):
+    return comma_delimited.split(',') if comma_delimited else []
+
+
 class CompileCommand(Command):
     """CompileCommand
     Implements the `Command` interface from `setuptools`
@@ -76,7 +81,8 @@ class CompileCommand(Command):
         ('qt-modules=', None, 'The QT modules to compile'),
         ('package=', None, 'The package to compile'),
         ('inno-setup-path=', None, 'The path to inno setup'),
-        ('win-console=', None, 'Whether or not the resulting application should use the console')
+        ('win-console=', None, 'Whether or not the resulting application should use the console'),
+        ('skip-installer=', None, 'Skip the installer')
     ]
 
 
@@ -116,6 +122,11 @@ class CompileCommand(Command):
         self.languages = None
         self.vc_redist_dir = None
         self.qtquick_modules = None
+        self.stdlib_modules = None
+        self.external_stdlib_modules = None
+        self.stdlib_binaries = None
+        self.external_packages = None
+        self.skip_installer = False
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -147,11 +158,18 @@ class CompileCommand(Command):
         assert not self.resources_dir or path.isdir(self.resources_dir),\
             'Resources directory provided is not a directory'
         assert path.isdir(self.vc_redist_dir), 'vc_redist_dir not found'
-        self.qt_modules = self.qt_modules.split(',')
-        self.qtquick_modules = self.qtquick_modules.split(',') if self.qtquick_modules else []
+        self.qt_modules = to_str_list(self.qt_modules)
+        self.qtquick_modules = to_str_list(self.qtquick_modules)
+        self.stdlib_modules = to_str_list(self.stdlib_modules)
+        self.external_stdlib_modules = to_str_list(self.external_stdlib_modules)
+        self.stdlib_binaries = to_str_list(self.stdlib_binaries)
+        self.external_packages = to_str_list(self.external_packages)
         self.languages = [] if not self.languages else self.languages.split(',')
         self.win_console =\
             self.win_console.lower() in ['1', 'true', 't', 'yes'] if self.win_console\
+            else False
+        self.skip_installer =\
+            self.skip_installer.lower() in ['1', 'true', 't', 'yes'] if self.skip_installer\
             else False
 
         self.build_dir = self.build_dir or 'build'
@@ -163,7 +181,8 @@ class CompileCommand(Command):
             'platform': self.platform,
             'app_name': self.app_name,
             'app_icon': self.app_icon,
-            'resources_dir': self.resources_dir
+            'resources_dir': self.resources_dir,
+            'package': self.package
         }
 
         self.externals_config = {
@@ -182,6 +201,7 @@ class CompileCommand(Command):
 
         # Create the app resources
         self._create_app_resources()
+        self._copy_qml_modules()
 
         vc_env = self._get_vc_env()
 
@@ -206,8 +226,15 @@ class CompileCommand(Command):
         # Copy the dlls to the release directory
         self._copy_binaries(dest)
 
-        # Build the installer
-        self._build_installer(dest)
+        # Copy the external packages to the release directory
+        self._copy_external_packages(dest)
+
+        if 'QtWebEngine' in self.qt_modules:
+            self._copy_qt_web_engine_resources(dest)
+
+        if not self.skip_installer:
+            # Build the installer
+            self._build_installer(dest)
 
 
     @property
@@ -221,6 +248,17 @@ class CompileCommand(Command):
 
 
     def _build_project_file(self):
+        app_packages = [self._get_py_packages('.', self.package)]
+        # external_package_definitions = []
+        # external_modules = []
+        # external_package_path = path.relpath(self._get_external_package_path(self.external_packages), '.')
+        # for require in self.external_packages:
+        #     if path.isdir(path.join(external_package_path, require)):
+        #         package = self._get_py_packages(external_package_path, require)
+        #         external_package_definitions.append(package)
+        #     elif path.isfile(path.join(external_package_path, f'{require}.py')):
+        #         external_modules.append(f'{require}.py')
+        
         args = {
             'project_name': self._project_name,
             'package': self.package,
@@ -228,10 +266,34 @@ class CompileCommand(Command):
             'build_dir': self.build_dir,
             'python_version': get_python_version(self.python_dir),
             'win_console': '1' if self.win_console else '0',
-            'translation_files': self._get_translation_files()
+            'translation_files': self._get_translation_files(),
+            'py_packages': app_packages,
+            # 'external_packages': [{
+            #     'name': external_package_path,
+            #     'packages': external_package_definitions,
+            #     'modules': external_modules
+            # }],
+            'stdlib_modules': self.stdlib_modules
         }
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
+
+
+    def _get_external_package_path(self, requires, package_exists=None):
+        valid_package_paths = sys.path
+        package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')))
+        for require in requires:
+            valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
+        assert valid_package_paths, 'No valid package paths found'
+        return valid_package_paths[0]
+
+
+    def _get_py_packages(self, base, package):
+        basepath = path.join(base, package)
+        files = os.listdir(basepath)
+        packages = [self._get_py_packages(basepath, p) for p in files if path.isdir(path.join(basepath, p)) and not p.startswith('__')]
+        modules = [m for m in files if m.endswith('.py')]
+        return {'name': package, 'packages': packages, 'modules': modules}
 
 
     def _create_app_resources(self):
@@ -257,6 +319,26 @@ class CompileCommand(Command):
             if not path.isdir(path.dirname(dest)):
                 os.makedirs(path.dirname(dest))
             shutil.copyfile(resource_file, dest)
+
+
+    def _copy_qml_modules(self):
+        qml_dir_files = glob(f'{self.package}/**/qmldir', recursive=True)
+
+        for qml_dir_file in qml_dir_files:
+            dest = path.join(self.build_dir, 'release', qml_dir_file)
+            if not path.isdir(path.dirname(dest)):
+                os.makedirs(path.dirname(dest))
+            shutil.copyfile(qml_dir_file, dest)
+
+    def _copy_qt_web_engine_resources(self, dest):
+        shutil.copyfile(path.join(self._qt_dir, 'QtWebEngineProcess.exe'), path.join(dest, 'QtWebEngineProcess.exe'))
+        qt_resources_dir = path.abspath(path.join(self._qt_dir, '..', 'resources'))
+        qt_translations_dir = path.join(self._qt_dir, '..', 'translations')
+        for resource in glob(qt_resources_dir + '/*'):
+            shutil.copyfile(resource, path.join(dest, 'resources', path.basename(resource)))
+        locales_dest = path.join(dest, 'translations', 'qtwebengine_locales')
+        if not path.isdir(locales_dest):
+            shutil.copytree(path.join(qt_translations_dir, 'qtwebengine_locales'), locales_dest)
 
 
     def _generate_ts(self, env):
@@ -345,7 +427,7 @@ class CompileCommand(Command):
             module_src = path.join(qml_dir, module)
             exclude_endswith = ['d.dll', '.pdb']
             for module_file in glob(f'{module_src}/**/*', recursive=True):
-                if path.isfile(module_file) and any(module_file.endswith, exclude_endswith):
+                if path.isfile(module_file) and not any(map(module_file.endswith, exclude_endswith)):
                     dest = path.join(qml_dest, path.relpath(module_file, qml_dir))
                     if not path.isdir(path.dirname(dest)):
                         os.makedirs(path.dirname(dest))
@@ -356,6 +438,9 @@ class CompileCommand(Command):
         # Copy the dll paths we know about
         for dll_path in self._get_dll_paths():
             shutil.copyfile(dll_path, path.join(dest, path.basename(dll_path)))
+        
+        # for pyd_src, pyd_dest in self._get_pyd_paths():
+        #     shutil.copyfile(pyd_src, path.join(dest, pyd_dest))
 
         # Copy the qwindows.dll file
         platforms_dir = path.join(self._qt_dir, '..', 'plugins', 'platforms')
@@ -376,6 +461,21 @@ class CompileCommand(Command):
             '--qmldir', qml_dir,
             app_binary
         ])
+
+    def _copy_external_packages(self, dest):
+        external_packages_path = self._get_external_package_path(self.external_packages)
+        package_dest = path.join(dest, 'packages')
+        for package in self.external_packages:
+            if path.isdir(path.join(external_packages_path, package)) and not path.isdir(path.join(package_dest, package)):
+                shutil.copytree(path.join(external_packages_path, package), path.join(package_dest, package))
+            elif path.isfile(path.join(external_packages_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
+                shutil.copyfile(path.join(external_packages_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
+        
+        external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
+        for package in self.external_stdlib_modules:
+            if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
+                shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package))
+
 
     def _save_compile_user_config(self):
         config = ConfigParser()
@@ -408,7 +508,31 @@ class CompileCommand(Command):
                 for m in qt_dll_modules if m != 'Qt'
         ]
         python_dlls = [path.join(self.python_dir, f'{d}.dll') for d in ['python3', 'python36']]
-        return pyqt_dlls + [sip_dll] + qt_dlls + python_dlls
+        if self.stdlib_binaries:
+            module_path = self._get_external_package_path(self.stdlib_binaries, lambda d, r: path.isfile(path.join(d, f'{r}.pyd')))
+            python_compiled_module_dlls = [path.join(module_path, f'{r}.pyd') for r in self.stdlib_binaries]
+        else:
+            python_compiled_module_dlls = []
+        external_module_dlls = []
+        packages_path = self._get_external_package_path(self.external_packages)
+        for package in self.external_packages:
+            external_module_dlls += glob(path.join(packages_path, package) + '/**/*.dll')
+        return pyqt_dlls + [sip_dll] + qt_dlls + python_dlls + python_compiled_module_dlls + external_module_dlls
+
+    def _get_pyd_paths(self):
+        pyd_paths = []
+        packages_path = self._get_external_package_path(self.external_packages)
+
+        def source_to_dest(src, packages_path):
+            source_dir = path.dirname(src)
+            source_file = path.basename(src).split('.')[0] + '.pyd'
+            return path.relpath(source_dir, packages_path).replace(path.sep, '.') + '.' + source_file
+
+        for package in self.external_packages:
+            source_files = glob(path.join(packages_path, package) + '/**/*.pyd')
+            dest_files = [source_to_dest(src, packages_path) for src in source_files]
+            pyd_paths += list(zip(source_files, dest_files))
+        return pyd_paths
 
     def _get_pyqt_lib_paths(self):
         return [

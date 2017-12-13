@@ -6,7 +6,47 @@
 CONFIG += qtquickcompiler
 TRANSLATIONS = {% for t in translation_files %}{{t}}\
         {% endfor %}</QMakeConfiguration>
-    </Application>    
-    {% for m in qt_modules %}<PyQtModule name="{{m}}" />
-    {% endfor %}<Others builddir="{{build_dir}}" qmake="" />
+        {%- for p in py_packages recursive %}
+        {%- if loop.depth == 1 %}
+        <Package name="{{p['name']}}">
+        {%- else %}
+            <PackageContent included="1" isdirectory="1" name="{{p['name']}}">
+        {%- endif %}
+            {%- set package_loop = loop %}
+            {%- for m in p['modules'] %}
+            <PackageContent included="1" isdirectory="0" name="{{m}}"/>
+            {%- endfor %}
+            {{ package_loop(p['packages']) }}
+        {%- if loop.depth == 1 %}
+        </Package>
+        {%- else %}
+            </PackageContent>
+
+        {%- endif %}
+        {%- endfor %}
+    </Application>
+    {%- for m in qt_modules %}
+    <PyQtModule name="{{m}}" />
+    {%- endfor %}
+    {%- for l in stdlib_modules %}
+    <StdlibModule name="{{l}}" />
+    {%- endfor %}
+    {%- for p in external_packages recursive %}
+    {%- if loop.depth == 1 %}
+    <Package name="{{p['name']}}">
+    {%- else %}
+        <PackageContent included="1" isdirectory="1" name="{{p['name']}}">
+    {%- endif %}
+        {%- set package_loop = loop %}
+        {%- for m in p['modules'] %}
+        <PackageContent included="1" isdirectory="0" name="{{m}}"/>
+        {%- endfor %}
+        {{ package_loop(p['packages']) }}
+    {%- if loop.depth == 1 %}
+    </Package>
+    {%- else %}
+        </PackageContent>
+
+    {%- endif %}
+    {%- endfor %}<Others builddir="{{build_dir}}" qmake="" />
 </Project>
