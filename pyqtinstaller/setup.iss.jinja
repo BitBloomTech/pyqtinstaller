@@ -14,7 +14,7 @@ DefaultGroupName={{app_name}}
 UninstallDisplayIcon={app}\{{exe_filename}}
 Compression=lzma2
 SolidCompression=yes
-OutputBaseFilename={{app_name.replace(' ', '')}}_{{app_version}}_{{platform}}
+OutputBaseFilename={{installer_filename}}
 OutputDir=.
 ; "ArchitecturesAllowed=x64" specifies that Setup cannot run on
 ; anything but x64.
@@ -30,16 +30,18 @@ InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [Files]
 ; App Files
-Source: "{{exe_filename}}"; DestDir: "{app}"; DestName: "{{exe_filename}}"
+Source: "*.exe"; DestDir: "{app}"
 Source: "*.dll"; DestDir: "{app}"
 Source: "*.pyd"; DestDir: "{app}"
 Source: "platforms\*.dll"; DestDir: "{app}\platforms"
 ; Resources
-Source: "{{resources_dir}}\{{app_icon}}"; DestDir: "{app}\{{resources_dir}}";
-Source: "translations\*.qm"; DestDir: "{app}\translations";
+Source: "{{resources_dir}}\*"; DestDir: "{app}\{{resources_dir}}"; Flags: recursesubdirs
+Source: "translations\*"; DestDir: "{app}\translations"; Flags: recursesubdirs
 ; QML
 Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
-Source: {{package}}\*; DestDir: "{app}\{{package}}; Flags: recursesubdirs
+Source: {{package}}\*; DestDir: "{app}\{{package}}"; Flags: recursesubdirs
+; Python
+Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
 ; Externals
 Source: "{{vc_redist_dir}}\vc_redist.x64.exe"; DestDir: {tmp}; Flags: deleteafterinstall
 

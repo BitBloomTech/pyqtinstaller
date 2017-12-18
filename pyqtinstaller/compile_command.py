@@ -176,13 +176,12 @@ class CompileCommand(Command):
 
         # Installer options
         self.app_config = {
-            'app_version': get_version(self.package),
-            'exe_filename': f'{self.package}.exe',
-            'platform': self.platform,
+            'app_version': self._app_version,
             'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dir': self.resources_dir,
-            'package': self.package
+            'package': self.package,
+            'installer_filename': self._installer_filename
         }
 
         self.externals_config = {
@@ -196,6 +195,9 @@ class CompileCommand(Command):
         """Runs the command
         Performs the steps required to compile the application and generate an installer
         """
+        # Clean the output directory
+        self._clean()
+
         # Build the package project file
         self._build_project_file()
 
@@ -236,6 +238,10 @@ class CompileCommand(Command):
             # Build the installer
             self._build_installer(dest)
 
+    def _clean(self):
+        if path.isdir(self.build_dir):
+            shutil.rmtree(self.build_dir)
+
 
     @property
     def _qt_dir(self):
@@ -245,6 +251,16 @@ class CompileCommand(Command):
     @property
     def _project_name(self):
         return self.app_name.replace(' ', '')
+
+
+    @property
+    def _installer_filename(self):
+        return self._project_name + '_' + self._app_version + '_' + self.platform
+
+
+    @property
+    def _app_version(self):
+        return get_version(self.package)
 
 
     def _build_project_file(self):
@@ -415,6 +431,11 @@ class CompileCommand(Command):
 
         assert_call([self.inno_setup_path, fp.name])
 
+        filename = f'{self._installer_filename}.exe'
+
+        shutil.move(path.join(dest, filename), path.join(path.abspath('.'), filename))
+
+
     def _copy_qml(self, dest):
         qml_dest = path.join(dest, 'qml')
         if path.isdir(qml_dest):
@@ -467,14 +488,14 @@ class CompileCommand(Command):
         package_dest = path.join(dest, 'packages')
         for package in self.external_packages:
             if path.isdir(path.join(external_packages_path, package)) and not path.isdir(path.join(package_dest, package)):
-                shutil.copytree(path.join(external_packages_path, package), path.join(package_dest, package))
+                shutil.copytree(path.join(external_packages_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
             elif path.isfile(path.join(external_packages_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
                 shutil.copyfile(path.join(external_packages_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
         
         external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
         for package in self.external_stdlib_modules:
             if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
-                shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package))
+                shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 
 
     def _save_compile_user_config(self):
