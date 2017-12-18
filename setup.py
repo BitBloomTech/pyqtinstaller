@@ -12,5 +12,8 @@ setup(
         'distutils.commands': [
             'compile = pyqtinstaller:CompileCommand'
         ]
+    },
+    package_data={
+        'pyqtinstaller': ['*.jinja']
     }
 )
