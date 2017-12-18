@@ -42,15 +42,13 @@ Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
 Source: {{package}}\*; DestDir: "{app}\{{package}}"; Flags: recursesubdirs
 ; Python
 Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
-; Externals
-Source: "{{vc_redist_dir}}\vc_redist.x64.exe"; DestDir: {tmp}; Flags: deleteafterinstall
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: {tmp}\vc_redist.x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
+Filename: {app}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
 
 [Icons]
 Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{exe_filename}}"; IconFilename: "{app}\{{resources_dir}}\{{app_icon}}"; Tasks: desktopicon
