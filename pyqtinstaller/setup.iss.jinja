@@ -11,7 +11,7 @@ AppName={{app_name}}
 AppVersion={{app_version}}
 DefaultDirName={pf}\{{app_name}}
 DefaultGroupName={{app_name}}
-UninstallDisplayIcon={app}\{{exe_filename}}
+UninstallDisplayIcon={app}\{{resources_dir}}\{{app_icon}}
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename={{installer_filename}}
@@ -30,7 +30,10 @@ InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [Files]
 ; App Files
-Source: "*.exe"; DestDir: "{app}"
+Source: "{{package}}.exe"; DestDir: "{app}"
+{%- for e in external_exe_files %}
+Source: {{e}}; DestDir: "{app}"
+{%- endfor %}
 Source: "*.dll"; DestDir: "{app}"
 Source: "*.pyd"; DestDir: "{app}"
 Source: "platforms\*.dll"; DestDir: "{app}\platforms"
@@ -42,13 +45,26 @@ Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
 Source: {{package}}\*; DestDir: "{app}\{{package}}"; Flags: recursesubdirs
 ; Python
 Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
+; Additional Files
+{%- for f in additional_files %}
+Source: {{f}}; DestDir: {app}
+{%- endfor %}
+; Temp Files
+Source: vcredist_x64.exe; DestDir: {tmp}
+; Additional temp files
+{%- for f in additional_temp_files %}
+Source: {{f}}; DestDir: {tmp}
+{%- endfor %}
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: {app}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
+Filename: {tmp}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
+{%- for rc in run_commands %}
+Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc['status']}}
+{%- endfor %}
 
 [Icons]
 Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{exe_filename}}"; IconFilename: "{app}\{{resources_dir}}\{{app_icon}}"; Tasks: desktopicon

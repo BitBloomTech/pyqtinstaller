@@ -174,14 +174,15 @@ class CompileCommand(Command):
 
         self.build_dir = self.build_dir or 'build'
 
+        self.external_exe_files = []
+
         # Installer options
         self.app_config = {
             'app_version': self._app_version,
             'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dir': self.resources_dir,
-            'package': self.package,
-            'installer_filename': self._installer_filename
+            'package': self.package
         }
 
         self._save_compile_user_config()
@@ -236,8 +237,8 @@ class CompileCommand(Command):
         output_dirs = output_dirs or {'': self.output_dir}
 
         if not self.skip_installer:
-            for name, output_dir in output_dirs.items():
-                self._build_installer(name, output_dir)
+            for name, output in output_dirs.items():
+                self._build_installer(name, output)
 
     @staticmethod
     def assert_call(cmd, **kwargs):
@@ -374,6 +375,8 @@ class CompileCommand(Command):
         locales_dest = path.join(self.output_dir, 'translations', 'qtwebengine_locales')
         if not path.isdir(locales_dest):
             shutil.copytree(path.join(qt_translations_dir, 'qtwebengine_locales'), locales_dest)
+        
+        self.external_exe_files.append('QtWebEngineProcess.exe')
 
 
     def _generate_ts(self, env):
@@ -439,13 +442,27 @@ class CompileCommand(Command):
             env=env
         )
 
-    def _build_installer(self, name, output_dir):
-        installer_config = {**self.app_config}
-        if name:
-            installer_config = {
-                **installer_config,
-                'installer_filename': f'{self._installer_filename}-{name}'
-            }
+    def _build_installer(self, name, output):
+        installer_filename = self._installer_filename if not name else f'{self._installer_filename}-{name}'
+        if isinstance(output, dict):
+            output_dir = output['output_dir']
+            additional_files = output.get('additional_files', [])
+            additional_temp_files = output.get('additional_temp_files', [])
+            run_commands = output.get('run', [])
+        else:
+            output_dir = output
+            additional_files = []
+            run_commands = []
+            additional_temp_files = []
+
+        installer_config = {
+            **self.app_config,
+            'installer_filename': installer_filename,
+            'additional_files': additional_files,
+            'run_commands': run_commands,
+            'external_exe_files': self.external_exe_files,
+            'additional_temp_files': additional_temp_files
+        }
 
         setup_script = get_template('setup.iss').render(installer_config)
 
