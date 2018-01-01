@@ -229,14 +229,14 @@ class CompileCommand(Command):
         if 'QtWebEngine' in self.qt_modules:
             self._copy_qt_web_engine_resources()
 
-        output_dirs = {}
-
-        for post_build_step in self.post_build:
-            output_dirs = {**output_dirs, **self._exec_post_build(post_build_step)}
-        
-        output_dirs = output_dirs or {'': self.output_dir}
-
         if not self.skip_installer:
+            output_dirs = {}
+
+            for post_build_step in self.post_build:
+                output_dirs = {**output_dirs, **self._exec_post_build(post_build_step)}
+            
+            output_dirs = output_dirs or {'': self.output_dir}
+
             for name, output in output_dirs.items():
                 self._build_installer(name, output)
 
@@ -317,10 +317,10 @@ class CompileCommand(Command):
 
     def _get_external_package_path(self, requires, package_exists=None):
         valid_package_paths = sys.path
-        package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')))
+        package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or glob(path.join(d, f'{r}.*.pyd')))
         for require in requires:
             valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
-        assert valid_package_paths, 'No valid package paths found'
+        assert valid_package_paths, f'No valid package paths found for {requires}'
         return valid_package_paths[0]
 
 
@@ -531,7 +531,10 @@ class CompileCommand(Command):
                 shutil.copytree(path.join(external_packages_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
             elif path.isfile(path.join(external_packages_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
                 shutil.copyfile(path.join(external_packages_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
-        
+            elif glob(path.join(external_packages_path, f'{package}.*.pyd')):
+                compiled_package_binary = glob(path.join(external_packages_path, f'{package}.*.pyd'))[0]
+                shutil.copyfile(compiled_package_binary, path.join(package_dest, path.basename(compiled_package_binary)))
+
         external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
         for package in self.external_stdlib_modules:
             if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
