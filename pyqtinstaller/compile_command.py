@@ -281,6 +281,11 @@ class CompileCommand(Command):
     def output_dir(self):
         return path.join(self.build_dir, 'release')
 
+    
+    @property
+    def qmake_pro_file(self):
+        return path.join(self.build_dir, f'{self._project_name}.pro')
+
 
     def _build_project_file(self):
         app_packages = [self._get_py_packages('.', self.package)]
@@ -381,12 +386,17 @@ class CompileCommand(Command):
 
     def _generate_ts(self, env):
         if self.languages:
+            temp_tr_filename = path.join(self.build_dir, 'temp_tr.py')
+            with open(temp_tr_filename, 'w') as temp_tr:
+                for filename in glob(f'{self.package}/**/*.py', recursive=True):
+                    with open(filename) as src:
+                        temp_tr.writelines(src.readlines())
             if not path.isdir('translations'):
                 os.makedirs('translations')
             assert_call([
-                path.join(self._qt_dir, 'lupdate'),
+                'pylupdate5',
                 '-verbose',
-                self.package,
+                temp_tr_filename,
                 '-ts'
             ] + self._get_translation_files(), env=env)
             dest = path.join(self.build_dir, 'translations')
@@ -399,7 +409,7 @@ class CompileCommand(Command):
         assert_call([
             path.join(self._qt_dir, 'lrelease'),
             '-verbose',
-            path.join(self.build_dir, f'{self._project_name}.pro')
+            self.qmake_pro_file
         ], env=env)
 
         qm_files = glob(path.join(self.build_dir, 'translations', '*.qm'))
