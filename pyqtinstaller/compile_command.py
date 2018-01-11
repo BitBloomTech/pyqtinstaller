@@ -200,7 +200,8 @@ class CompileCommand(Command):
 
         # Create the app resources
         self._create_app_resources()
-        self._copy_qml_modules()
+        if self.qtquick_modules:
+            self._copy_qml_modules()
 
         vc_env = self._get_vc_env()
 
@@ -471,7 +472,8 @@ class CompileCommand(Command):
             'additional_files': additional_files,
             'run_commands': run_commands,
             'external_exe_files': self.external_exe_files,
-            'additional_temp_files': additional_temp_files
+            'additional_temp_files': additional_temp_files,
+            'qtquick_modules': True if self.qtquick_modules else False
         }
 
         setup_script = get_template('setup.iss').render(installer_config)
