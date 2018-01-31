@@ -11,6 +11,7 @@ import shutil
 from glob import glob
 from typing import Sequence
 import importlib.util
+from datetime import datetime
 
 from setuptools import Command
 from jinja2 import Template
@@ -44,7 +45,15 @@ def get_version(package: str):
     """Gets the version of the package we're building
     """
     exec(f'import {package}') #pylint: disable=exec-used
-    return eval(f'{package}.__version__') #pylint: disable=eval-used
+    package_version = eval(f'{package}.__version__') #pylint: disable=eval-used
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    version_parts = package_version.split('-')
+    if len(version_parts) == 1:
+        version_parts.append(timestamp)
+    else:
+        version_parts[-1] = timestamp
+    return '-'.join(version_parts)
+
 
 
 def get_template(name: str) -> Template:
@@ -176,6 +185,8 @@ class CompileCommand(Command):
 
         self.external_exe_files = []
 
+        self._app_version_c = None
+
         # Installer options
         self.app_config = {
             'app_version': self._app_version,
@@ -192,6 +203,9 @@ class CompileCommand(Command):
         """Runs the command
         Performs the steps required to compile the application and generate an installer
         """
+        # Apply version
+        self._apply_version()
+        
         # Clean the output directory
         self._clean()
 
@@ -207,6 +221,9 @@ class CompileCommand(Command):
 
         # Build the qt project file
         self._run_pyqtdeploy(vc_env)
+
+        # Remove version
+        self._remove_version()
 
         # Generate translations
         self._generate_ts(vc_env)
@@ -270,13 +287,18 @@ class CompileCommand(Command):
 
     @property
     def _app_version(self):
-        return get_version(self.package)
+        if self._app_version_c is None:
+            self._app_version_c = get_version(self.package)
+        return self._app_version_c
 
 
     @property
     def _app_version_short(self):
-        return self._app_version.split('-')[0]
-
+        version_parts = self._app_version.split('-')
+        if len(version_parts) == 1:
+            return version_parts[0]
+        else:
+            return version_parts[0] + '.' + version_parts[-1]
 
     @property
     def output_dir(self):
@@ -320,6 +342,12 @@ class CompileCommand(Command):
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
 
+    def _apply_version(self):
+        with open(path.join(self.package, '__version__.py'), 'w') as fp:
+            fp.write(f'__version__ = \'{self._app_version}\'')
+    
+    def _remove_version(self):
+        os.remove(path.join(self.package, '__version__.py'))
 
     def _get_external_package_path(self, requires, package_exists=None):
         valid_package_paths = sys.path
