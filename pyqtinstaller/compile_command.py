@@ -44,16 +44,21 @@ def get_vc_bin_dir(vc_dir: str, platform: str):
 def get_version(package: str):
     """Gets the version of the package we're building
     """
-    exec(f'import {package}') #pylint: disable=exec-used
-    package_version = eval(f'{package}.__version__') #pylint: disable=eval-used
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    version_parts = package_version.split('-')
-    if len(version_parts) == 1:
-        version_parts.append(timestamp)
+    package_version = check_output('git describe --tags').decode('utf8')
+    if package_version:
+        return '-'.join(package_version.replace('v', '').split('-')[:-1])
     else:
-        version_parts[-1] = timestamp
-    return '-'.join(version_parts)
+        exec(f'import {package}') #pylint: disable=exec-used
+        package_version = eval(f'{package}.__version__') #pylint: disable=eval-used
 
+        build = datetime.now().strftime('%Y%m%d%H%M%S')
+
+        version_parts = package_version.split('-')
+        if len(version_parts) == 1:
+            version_parts.append(build)
+        else:
+            version_parts[-1] = build
+        return '-'.join(version_parts)
 
 
 def get_template(name: str) -> Template:
