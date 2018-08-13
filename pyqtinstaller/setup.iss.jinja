@@ -11,12 +11,13 @@ AppName={{app_name}}
 AppVersion={{app_version}}
 DefaultDirName={pf}\{{app_name}}
 DefaultGroupName={{app_name}}
-UninstallDisplayIcon={app}\{{resources_dir}}\{{app_icon}}
-LicenseFile={{resources_dir}}\License.rtf
+UninstallDisplayIcon={app}\{{app_icon}}
+LicenseFile={{license_file}}
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename={{installer_filename}}
 OutputDir=.
+ChangesAssociations=yes
 ; "ArchitecturesAllowed=x64" specifies that Setup cannot run on
 ; anything but x64.
 ArchitecturesAllowed=x64
@@ -31,7 +32,7 @@ InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [Files]
 ; App Files
-Source: "{{package}}.exe"; DestDir: "{app}"
+Source: "{{app_name}}.exe"; DestDir: "{app}"
 {%- for e in external_exe_files %}
 Source: {{e}}; DestDir: "{app}"
 {%- endfor %}
@@ -39,13 +40,10 @@ Source: "*.dll"; DestDir: "{app}"
 Source: "*.pyd"; DestDir: "{app}"
 Source: "platforms\*.dll"; DestDir: "{app}\platforms"
 ; Resources
+{%- for resources_dir in resources_dirs %}
 Source: "{{resources_dir}}\*"; DestDir: "{app}\{{resources_dir}}"; Flags: recursesubdirs
+{%- endfor %}
 Source: "translations\*"; DestDir: "{app}\translations"; Flags: recursesubdirs
-{%- if qtquick_modules %}
-; QML
-Source: qml\*; DestDir: "{app}\qml"; Flags: recursesubdirs
-Source: {{package}}\*; DestDir: "{app}\{{package}}"; Flags: recursesubdirs
-{%- endif %}
 ; Python
 Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
 ; Additional Files
@@ -70,6 +68,12 @@ Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc
 {%- endfor %}
 
 [Icons]
-Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{package}}.exe"; IconFilename: "{app}\{{resources_dir}}\{{app_icon}}"; Tasks: desktopicon
-Name: "{group}\{{app_name}}"; Filename: "{app}\{{package}}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\resources\test_icon.ico"; Tasks: startmenuicon
+Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; IconFilename: "{app}\{{app_icon}}"; Tasks: desktopicon
+Name: "{group}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\resources\test_icon.ico"; Tasks: startmenuicon
 Name: "{group}\{cm:UninstallProgram,{{app_name}}}"; Filename: "{uninstallexe}"; IconFilename: "{app}\resources\test_icon.ico"; Tasks: startmenuicon
+
+[Registry]
+Root: HKCR; Subkey: ".{{file_extension}}"; ValueData: "{{app_name}}"; Flags: uninsdeletevalue; ValueType: string; ValueName: ""
+Root: HKCR; Subkey: "{{app_name}}"; ValueData: "{{app_name}}"; Flags: uninsdeletekey; ValueType: string; ValueName: ""
+Root: HKCR; Subkey: "{{app_name}}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{{app_name}}.exe,0";
+Root: HKCR; Subkey: "{{app_name}}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{{app_name}}.exe"" ""%1"""

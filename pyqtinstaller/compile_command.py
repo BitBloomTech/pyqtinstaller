@@ -44,9 +44,10 @@ def get_vc_bin_dir(vc_dir: str, platform: str):
 def get_version(package: str):
     """Gets the version of the package we're building
     """
-    package_version = check_output('git describe --tags').decode('utf8')
+    package_version = check_output('git describe --tags').decode('utf8').strip()
     if package_version:
-        return '-'.join(package_version.replace('v', '').split('-')[:-1])
+        version_parts = package_version.replace('v', '').split('-')
+        return '-'.join(version_parts if len(version_parts) <= 2 else version_parts[:-1])
     else:
         exec(f'import {package}') #pylint: disable=exec-used
         package_version = eval(f'{package}.__version__') #pylint: disable=eval-used
@@ -133,9 +134,11 @@ class CompileCommand(Command):
         self.inno_setup_path = user_compile_config.get('inno_setup_path', None)
         self.package = None
         self.app_name = None
+        self.file_extension = None
         self.app_icon = None
+        self.license_file = None
         self.build_dir = None
-        self.resources_dir = None
+        self.resources_dirs = None
         self.win_console = False
         self.languages = None
         self.qtquick_modules = None
@@ -145,6 +148,7 @@ class CompileCommand(Command):
         self.external_packages = None
         self.skip_installer = False
         self.post_build = None
+        self.pre_build = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -173,8 +177,7 @@ class CompileCommand(Command):
         assert self.package, 'package must be specified'
         assert self.app_name, 'Must provide an app name'
         assert path.isdir(self.package), 'package not found'
-        assert not self.resources_dir or path.isdir(self.resources_dir),\
-            'Resources directory provided is not a directory'
+        self.resources_dirs = to_str_list(self.resources_dirs)
         self.qt_modules = to_str_list(self.qt_modules)
         self.qtquick_modules = to_str_list(self.qtquick_modules)
         self.stdlib_modules = to_str_list(self.stdlib_modules)
@@ -183,6 +186,7 @@ class CompileCommand(Command):
         self.external_packages = to_str_list(self.external_packages)
         self.languages = to_str_list(self.languages)
         self.post_build = to_str_list(self.post_build)
+        self.pre_build = to_str_list(self.pre_build)
         self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
 
@@ -197,8 +201,10 @@ class CompileCommand(Command):
             'app_version': self._app_version,
             'app_name': self.app_name,
             'app_icon': self.app_icon,
-            'resources_dir': self.resources_dir,
-            'package': self.package
+            'resources_dirs': self.resources_dirs,
+            'package': self.package,
+            'license_file': self.license_file,
+            'file_extension': self.file_extension
         }
 
         self._save_compile_user_config()
@@ -213,6 +219,10 @@ class CompileCommand(Command):
         
         # Clean the output directory
         self._clean()
+
+        # Exec pre build
+        for pre_build_step in self.pre_build:
+            self._exec_build_step(pre_build_step)
 
         # Build the package project file
         self._build_project_file()
@@ -256,7 +266,7 @@ class CompileCommand(Command):
             output_dirs = {}
 
             for post_build_step in self.post_build:
-                output_dirs = {**output_dirs, **self._exec_post_build(post_build_step)}
+                output_dirs = {**output_dirs, **self._exec_build_step(post_build_step)}
             
             output_dirs = output_dirs or {'': self.output_dir}
 
@@ -328,6 +338,7 @@ class CompileCommand(Command):
         #         external_modules.append(f'{require}.py')
         
         args = {
+            **self.app_config,
             'project_name': self._project_name,
             'package': self.package,
             'qt_modules': self.qt_modules,
@@ -359,7 +370,7 @@ class CompileCommand(Command):
         package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or glob(path.join(d, f'{r}.*.pyd')))
         for require in requires:
             valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
-        assert valid_package_paths, f'No valid package paths found for {requires}'
+            assert valid_package_paths, f'No valid package paths found for {require}'
         return valid_package_paths[0]
 
 
@@ -388,12 +399,13 @@ class CompileCommand(Command):
                 os.makedirs(path.dirname(dest))
             shutil.copyfile(resource_file, dest)
 
-        other_resource_files = glob(f'{self.resources_dir}/**/*', recursive=True)
-        for resource_file in other_resource_files:
-            dest = path.join(self.output_dir, resource_file)
-            if not path.isdir(path.dirname(dest)):
-                os.makedirs(path.dirname(dest))
-            shutil.copyfile(resource_file, dest)
+        for resources_dir in self.resources_dirs:
+            other_resource_files = glob(f'{resources_dir}/**/*', recursive=True)
+            for resource_file in [f for f in other_resource_files if path.isfile(f)]:
+                dest = path.join(self.output_dir, resource_file)
+                if not path.isdir(path.dirname(dest)):
+                    os.makedirs(path.dirname(dest))
+                shutil.copyfile(resource_file, dest)
 
 
     def _copy_qml_modules(self):
@@ -472,7 +484,7 @@ class CompileCommand(Command):
 
 
     def _run_pyqtdeploy(self, env):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self.package}.pdy'], env=env)
+        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy'], env=env)
 
 
     def _run_qmake(self, env):
@@ -657,8 +669,8 @@ class CompileCommand(Command):
         return path.join(self.prebuilt_libraries_dir, 'sip-4.19.5', 'siplib')
 
 
-    def _exec_post_build(self, post_build_step):
-        filename, function = post_build_step.split(':')
+    def _exec_build_step(self, build_step):
+        filename, function = build_step.split(':')
         spec = importlib.util.spec_from_file_location("module", filename)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
