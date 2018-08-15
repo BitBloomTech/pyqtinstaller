@@ -29,8 +29,8 @@ def get_vc_env(vc_dir: str, platform: str):
     vc_env = {}
     for line in vcvars.splitlines():
         name, value = line.split('=')
-        vc_env[name] = value
-    vc_env['Path'] = '{};{}'.format(get_vc_bin_dir(vc_dir, platform), vc_env['Path'])
+        vc_env[name.upper()] = value
+    vc_env['PATH'] = '{};{}'.format(get_vc_bin_dir(vc_dir, platform), vc_env['PATH'])
     return vc_env
 
 def get_vc_bin_dir(vc_dir: str, platform: str):
