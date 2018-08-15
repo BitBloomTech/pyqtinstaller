@@ -33,7 +33,7 @@ TRANSLATIONS = {% for t in translation_files %}{{t}}\
     {%- for l in stdlib_modules %}
     <StdlibModule name="{{l}}" />
     {%- endfor %}
-    {%- for p in external_packages recursive %}
+    {%- for p in compiled_packages recursive %}
     {%- if loop.depth == 1 %}
     <Package name="{{p['name']}}">
     {%- else %}

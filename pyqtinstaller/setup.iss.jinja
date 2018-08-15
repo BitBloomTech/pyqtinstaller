@@ -43,7 +43,9 @@ Source: "platforms\*.dll"; DestDir: "{app}\platforms"
 {%- for resources_dir in resources_dirs %}
 Source: "{{resources_dir}}\*"; DestDir: "{app}\{{resources_dir}}"; Flags: recursesubdirs
 {%- endfor %}
+{%- if include_translations %}
 Source: "translations\*"; DestDir: "{app}\translations"; Flags: recursesubdirs
+{%- endif %}
 ; Python
 Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
 ; Additional Files

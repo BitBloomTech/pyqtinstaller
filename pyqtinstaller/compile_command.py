@@ -6,7 +6,6 @@ from subprocess import call, check_output
 import sys
 import os
 from os import path
-from configparser import ConfigParser
 import shutil
 from glob import glob
 from typing import Sequence
@@ -101,37 +100,22 @@ class CompileCommand(Command):
         ('package=', None, 'The package to compile'),
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
-        ('skip-installer=', None, 'Skip the installer')
+        ('skip-installer=', None, 'Skip the installer'),
+        ('compiled-packages=', None, 'Packages to compile')
     ]
-
 
     def initialize_options(self):
         """Implementation of `Command` initialize_options
         Loads default options from user configuration
         """
         #pylint: disable=attribute-defined-outside-init
-        assert path.exists('setup.cfg'), 'setup.cfg not found'
-        with open('setup.cfg') as fp:
-            config = ConfigParser()
-            config.read_file(fp)
-            compile_config = config['compile'] if config.has_section('compile') else {}
-
-        self.qt_modules = compile_config.get('qt_modules', None)
-
-        if path.exists('setup.user.cfg'):
-            with open('setup.user.cfg') as fp:
-                config = ConfigParser()
-                config.read_file(fp)
-                user_compile_config = config['compile'] if config.has_section('compile') else {}
-        else:
-            user_compile_config = {}
-
-        self.qmake_path = user_compile_config.get('qmake_path', None)
-        self.vc_dir = user_compile_config.get('vc_dir', None)
-        self.platform = user_compile_config.get('platform', 'amd64')
-        self.prebuilt_libraries_dir = user_compile_config.get('prebuilt_libraries_dir')
-        self.python_dir = user_compile_config.get('python_dir', None)
-        self.inno_setup_path = user_compile_config.get('inno_setup_path', None)
+        self.qt_modules = None
+        self.qmake_path = None
+        self.vc_dir = None
+        self.platform = 'amd64'
+        self.prebuilt_libraries_dir = None
+        self.python_dir = None
+        self.inno_setup_path = None
         self.package = None
         self.app_name = None
         self.file_extension = None
@@ -141,7 +125,6 @@ class CompileCommand(Command):
         self.resources_dirs = None
         self.win_console = False
         self.languages = None
-        self.qtquick_modules = None
         self.stdlib_modules = None
         self.external_stdlib_modules = None
         self.stdlib_binaries = None
@@ -149,6 +132,7 @@ class CompileCommand(Command):
         self.skip_installer = False
         self.post_build = None
         self.pre_build = None
+        self.compiled_packages = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -179,7 +163,6 @@ class CompileCommand(Command):
         assert path.isdir(self.package), 'package not found'
         self.resources_dirs = to_str_list(self.resources_dirs)
         self.qt_modules = to_str_list(self.qt_modules)
-        self.qtquick_modules = to_str_list(self.qtquick_modules)
         self.stdlib_modules = to_str_list(self.stdlib_modules)
         self.external_stdlib_modules = to_str_list(self.external_stdlib_modules)
         self.stdlib_binaries = to_str_list(self.stdlib_binaries)
@@ -189,6 +172,7 @@ class CompileCommand(Command):
         self.pre_build = to_str_list(self.pre_build)
         self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
+        self.compiled_packages = to_str_list(self.compiled_packages)
 
         self.build_dir = self.build_dir or 'build'
 
@@ -206,8 +190,6 @@ class CompileCommand(Command):
             'license_file': self.license_file,
             'file_extension': self.file_extension
         }
-
-        self._save_compile_user_config()
 
 
     def run(self):
@@ -229,8 +211,6 @@ class CompileCommand(Command):
 
         # Create the app resources
         self._create_app_resources()
-        if self.qtquick_modules:
-            self._copy_qml_modules()
 
         vc_env = self._get_vc_env()
 
@@ -249,9 +229,6 @@ class CompileCommand(Command):
 
         # Build the exe
         self._run_nmake(vc_env)
-
-        # Copy the qml files
-        self._copy_qml()
 
         # Copy the dlls to the release directory
         self._copy_binaries(vc_env)
@@ -326,17 +303,18 @@ class CompileCommand(Command):
 
 
     def _build_project_file(self):
+
         app_packages = [self._get_py_packages('.', self.package)]
-        # external_package_definitions = []
-        # external_modules = []
-        # external_package_path = path.relpath(self._get_external_package_path(self.external_packages), '.')
-        # for require in self.external_packages:
-        #     if path.isdir(path.join(external_package_path, require)):
-        #         package = self._get_py_packages(external_package_path, require)
-        #         external_package_definitions.append(package)
-        #     elif path.isfile(path.join(external_package_path, f'{require}.py')):
-        #         external_modules.append(f'{require}.py')
-        
+        if self.compiled_packages:
+            compiled_packages_dir = self._get_external_package_path(self.compiled_packages)
+            compiled_packages = [{
+                'name': compiled_packages_dir,
+                'packages': [self._get_py_packages(compiled_packages_dir, p) for p in self.compiled_packages],
+                'modules': []
+            }]
+        else:
+            compiled_packages = []
+
         args = {
             **self.app_config,
             'project_name': self._project_name,
@@ -348,12 +326,8 @@ class CompileCommand(Command):
             'win_console': '1' if self.win_console else '0',
             'translation_files': self._get_translation_files(),
             'py_packages': app_packages,
-            # 'external_packages': [{
-            #     'name': external_package_path,
-            #     'packages': external_package_definitions,
-            #     'modules': external_modules
-            # }],
-            'stdlib_modules': self.stdlib_modules
+            'stdlib_modules': self.stdlib_modules,
+            'compiled_packages': compiled_packages
         }
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
@@ -407,15 +381,6 @@ class CompileCommand(Command):
                     os.makedirs(path.dirname(dest))
                 shutil.copyfile(resource_file, dest)
 
-
-    def _copy_qml_modules(self):
-        qml_dir_files = glob(f'{self.package}/**/qmldir', recursive=True)
-
-        for qml_dir_file in qml_dir_files:
-            dest = path.join(self.output_dir, qml_dir_file)
-            if not path.isdir(path.dirname(dest)):
-                os.makedirs(path.dirname(dest))
-            shutil.copyfile(qml_dir_file, dest)
 
     def _copy_qt_web_engine_resources(self):
         shutil.copyfile(path.join(self._qt_dir, 'QtWebEngineProcess.exe'), path.join(self.output_dir, 'QtWebEngineProcess.exe'))
@@ -518,7 +483,7 @@ class CompileCommand(Command):
             'run_commands': run_commands,
             'external_exe_files': self.external_exe_files,
             'additional_temp_files': additional_temp_files,
-            'qtquick_modules': True if self.qtquick_modules else False
+            'include_translations': True if self.languages else False
         }
 
         setup_script = get_template('setup.iss').render(installer_config)
@@ -531,25 +496,6 @@ class CompileCommand(Command):
         filename = installer_config['installer_filename'] + '.exe'
 
         shutil.move(path.join(output_dir, filename), path.join(path.abspath('.'), filename))
-
-
-    def _copy_qml(self):
-        qml_dest = path.join(self.output_dir, 'qml')
-        if path.isdir(qml_dest):
-            shutil.rmtree(qml_dest)
-
-        os.makedirs(qml_dest)
-
-        for module in self.qtquick_modules:
-            qml_dir = path.join(self._qt_dir, '..', 'qml')
-            module_src = path.join(qml_dir, module)
-            exclude_endswith = ['d.dll', '.pdb']
-            for module_file in glob(f'{module_src}/**/*', recursive=True):
-                if path.isfile(module_file) and not any(map(module_file.endswith, exclude_endswith)):
-                    dest = path.join(qml_dest, path.relpath(module_file, qml_dir))
-                    if not path.isdir(path.dirname(dest)):
-                        os.makedirs(path.dirname(dest))
-                    shutil.copyfile(module_file, dest)
 
 
     def _copy_binaries(self, env):
@@ -571,12 +517,10 @@ class CompileCommand(Command):
         )
 
         # Run windeployqt
-        qml_dir = path.join(self._qt_dir, '..', 'qml')
         app_binary = path.join(self.output_dir, f'{self._project_name}.exe')
         assert_call([
             path.join(self._qt_dir, 'windeployqt'),
             '--release',
-            '--qmldir', qml_dir,
             app_binary
         ], env=env)
 
@@ -597,33 +541,12 @@ class CompileCommand(Command):
             if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
                 shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 
-
-    def _save_compile_user_config(self):
-        config = ConfigParser()
-        if path.exists('setup.user.cfg'):
-            with open('setup.user.cfg') as fp:
-                config.read_file(fp)
-
-        if 'compile' not in config:
-            config['compile'] = {
-                'qmake_path': self.qmake_path,
-                'vc_dir': self.vc_dir,
-                'prebuilt_libraries_dir': self.prebuilt_libraries_dir,
-                'platform': self.platform,
-                'python_dir': self.python_dir,
-                'inno_setup_path': self.inno_setup_path
-            }
-            with open('setup.user.cfg', 'w') as fp:
-                config.write(fp)
-
     def _get_dll_paths(self):
         pyqt_dlls = [
             path.join(p, f'{m}.dll') for p, m in zip(self._get_pyqt_lib_paths(), self.qt_modules)
         ]
         sip_dll = path.join(self._get_sip_lib_path(), 'sip.pyd')
         qt_dll_modules = self.qt_modules
-        if 'QtQuick' in qt_dll_modules:
-            qt_dll_modules = qt_dll_modules + ['QtQuickControls2', 'QtQuickTemplates2']
         qt_dlls = [
             path.join(self._qt_dir, m.replace('Qt', 'Qt5') + '.dll')\
                 for m in qt_dll_modules if m != 'Qt'
