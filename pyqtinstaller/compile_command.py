@@ -45,7 +45,7 @@ def get_version(package: str):
     """
     package_version = check_output('git describe --tags').decode('utf8').strip()
     if package_version:
-        version_parts = package_version.replace('v', '').split('-')
+        version_parts = package_version.strip('v').split('-')
         return '-'.join(version_parts if len(version_parts) <= 2 else version_parts[:-1])
     else:
         exec(f'import {package}') #pylint: disable=exec-used

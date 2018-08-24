@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pyqtinstaller',
-    version='0.1.0',
+    version='0.2.2',
     packages=['pyqtinstaller'],
     install_requires=['jinja2', 'pyqtdeploy'],
     extras_require={
