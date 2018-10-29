@@ -341,7 +341,7 @@ class CompileCommand(Command):
 
     def _get_external_package_path(self, requires, package_exists=None):
         valid_package_paths = sys.path + ['.']
-        package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or glob(path.join(d, f'{r}.*.pyd')))
+        package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or path.isfile(path.join(d, f'{r}.egg-link')) or glob(path.join(d, f'{r}.*.pyd')))
         for require in requires:
             valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
             assert valid_package_paths, f'No valid package paths found for {require}'
@@ -523,17 +523,27 @@ class CompileCommand(Command):
             '--release',
             app_binary
         ], env=env)
+    
+    def _resolve_egg_link(self, external_packages_path, package):
+        if not path.isfile(path.join(external_packages_path, package + '.egg-link')):
+            return external_packages_path, package
+        else:
+            with open(path.join(external_packages_path, package + '.egg-link'), 'r') as fp:
+                current_path = fp.readlines()[0]
+            return current_path, package
+        
 
     def _copy_external_packages(self):
         external_packages_path = self._get_external_package_path(self.external_packages)
         package_dest = path.join(self.output_dir, 'packages')
         for package in self.external_packages:
-            if path.isdir(path.join(external_packages_path, package)) and not path.isdir(path.join(package_dest, package)):
-                shutil.copytree(path.join(external_packages_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-            elif path.isfile(path.join(external_packages_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
-                shutil.copyfile(path.join(external_packages_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
-            elif glob(path.join(external_packages_path, f'{package}.*.pyd')):
-                compiled_package_binary = glob(path.join(external_packages_path, f'{package}.*.pyd'))[0]
+            current_path, package = self._resolve_egg_link(external_packages_path, package)
+            if path.isdir(path.join(current_path, package)) and not path.isdir(path.join(package_dest, package)):
+                shutil.copytree(path.join(current_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            elif path.isfile(path.join(current_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
+                shutil.copyfile(path.join(current_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
+            elif glob(path.join(current_path, f'{package}.*.pyd')):
+                compiled_package_binary = glob(path.join(current_path, f'{package}.*.pyd'))[0]
                 shutil.copyfile(compiled_package_binary, path.join(package_dest, path.basename(compiled_package_binary)))
 
         external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
