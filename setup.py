@@ -4,7 +4,7 @@ setup(
     name='pyqtinstaller',
     version='0.2.2',
     packages=['pyqtinstaller'],
-    install_requires=['jinja2', 'pyqtdeploy'],
+    install_requires=['jinja2', 'pyqtdeploy==1.3.2'],
     extras_require={
         'dev': ['tox']
     },
