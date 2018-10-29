@@ -340,7 +340,7 @@ class CompileCommand(Command):
         os.remove(path.join(self.package, '__version__.py'))
 
     def _get_external_package_path(self, requires, package_exists=None):
-        valid_package_paths = sys.path
+        valid_package_paths = sys.path + ['.']
         package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or glob(path.join(d, f'{r}.*.pyd')))
         for require in requires:
             valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
