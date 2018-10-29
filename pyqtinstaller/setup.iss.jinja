@@ -12,7 +12,9 @@ AppVersion={{app_version}}
 DefaultDirName={pf}\{{app_name}}
 DefaultGroupName={{app_name}}
 UninstallDisplayIcon={app}\{{app_icon}}
+{%- if license_file %}
 LicenseFile={{license_file}}
+{%- endif %}
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename={{installer_filename}}
@@ -32,7 +34,7 @@ InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [Files]
 ; App Files
-Source: "{{app_name}}.exe"; DestDir: "{app}"
+Source: "{{app_name.replace(' ', '')}}.exe"; DestDir: "{app}"
 {%- for e in external_exe_files %}
 Source: {{e}}; DestDir: "{app}"
 {%- endfor %}
