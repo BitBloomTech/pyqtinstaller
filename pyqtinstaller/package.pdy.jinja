@@ -5,7 +5,9 @@
         <QMakeConfiguration>VERSION = {{app_version}}
 RESOURCES += app_resources/app_resources.qrc
 CONFIG += qtquickcompiler
+{%- if app_icon %}
 RC_ICONS = release/{{app_icon}}
+{%- endif %}
 TRANSLATIONS = {% for t in translation_files %}{{t}}\
         {% endfor %}</QMakeConfiguration>
         {%- for p in py_packages recursive %}
