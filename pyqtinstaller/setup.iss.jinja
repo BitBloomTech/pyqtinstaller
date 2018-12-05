@@ -73,8 +73,8 @@ Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc
 
 [Icons]
 Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; IconFilename: "{app}\{{app_icon}}"; Tasks: desktopicon
-Name: "{group}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\resources\test_icon.ico"; Tasks: startmenuicon
-Name: "{group}\{cm:UninstallProgram,{{app_name}}}"; Filename: "{uninstallexe}"; IconFilename: "{app}\resources\test_icon.ico"; Tasks: startmenuicon
+Name: "{group}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\{{app_icon}}"; Tasks: startmenuicon
+Name: "{group}\{cm:UninstallProgram,{{app_name}}}"; Filename: "{uninstallexe}"; IconFilename: "{app}\{{app_icon}}"; Tasks: startmenuicon
 
 [Registry]
 Root: HKCR; Subkey: ".{{file_extension}}"; ValueData: "{{app_name}}"; Flags: uninsdeletevalue; ValueType: string; ValueName: ""
