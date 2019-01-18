@@ -40,12 +40,15 @@ def get_vc_bin_dir(vc_dir: str, platform: str):
     return path.join(vc_dir, bin_dir)
 
 
-def get_version(package: str):
+def get_version(package: str, allow_untagged):
     """Gets the version of the package we're building
     """
     package_version = check_output('git describe --tags').decode('utf8').strip()
     if package_version:
         version_parts = package_version.strip('v').split('-')
+        if not allow_untagged and len(version_parts) > 2:
+            # Untagged commits have the pattern <tag>-<distance>-<commit>
+            raise ValueError('Untagged version not allowed! Description: {}'.format(package_version))
         return '-'.join(version_parts if len(version_parts) <= 2 else version_parts[:-1])
     else:
         exec(f'import {package}') #pylint: disable=exec-used
@@ -101,7 +104,8 @@ class CompileCommand(Command):
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
-        ('compiled-packages=', None, 'Packages to compile')
+        ('compiled-packages=', None, 'Packages to compile'),
+        ('allow-untagged=', None, 'Allow untagged releases')
     ]
 
     def initialize_options(self):
@@ -133,6 +137,7 @@ class CompileCommand(Command):
         self.post_build = None
         self.pre_build = None
         self.compiled_packages = None
+        self.allow_untagged = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -173,6 +178,7 @@ class CompileCommand(Command):
         self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
         self.compiled_packages = to_str_list(self.compiled_packages)
+        self.allow_untagged = to_bool(self.allow_untagged)
 
         self.build_dir = self.build_dir or 'build'
 
@@ -196,6 +202,7 @@ class CompileCommand(Command):
         """Runs the command
         Performs the steps required to compile the application and generate an installer
         """
+        sys.stdout.write('{} Building {} version "{}" {}\n'.format('*' * 10, self.app_name, '*' * 10, self._app_version))
         # Apply version
         self._apply_version()
         
@@ -280,7 +287,7 @@ class CompileCommand(Command):
     @property
     def _app_version(self):
         if self._app_version_c is None:
-            self._app_version_c = get_version(self.package)
+            self._app_version_c = get_version(self.package, self.allow_untagged)
         return self._app_version_c
 
 
