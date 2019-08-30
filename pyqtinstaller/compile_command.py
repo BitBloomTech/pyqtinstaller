@@ -111,7 +111,8 @@ class CompileCommand(Command):
     #pylint: disable=too-many-instance-attributes
     user_options = [
         ('qmake-path=', None, 'The path to qmake'),
-        ('prebuilt-libraries-dir=', None, 'The base directory of the prebuild libraries'),
+        ('pyqt-dir=', None, 'The base directory of PyQt'),
+        ('sip-dir=', None, 'The base directory of Sip'),
         ('python-dir=', None, 'The directory containing python'),
         ('vc-dir=', None, 'The path the Visual Studio 2015 VC directory'),
         ('platform=', None, 'The platform to compile for'),
@@ -133,7 +134,8 @@ class CompileCommand(Command):
         self.qmake_path = None
         self.vc_dir = None
         self.platform = 'amd64'
-        self.prebuilt_libraries_dir = None
+        self.pyqt_dir = None
+        self.sip_dir = None
         self.python_dir = None
         self.inno_setup_path = None
         self.package = None
@@ -165,15 +167,18 @@ class CompileCommand(Command):
         assert self.qmake_path, 'qmake-path must be provided'
         assert self.vc_dir, 'vc-path must be provided'
         assert self.platform, 'platform must be specified'
-        assert self.prebuilt_libraries_dir, 'prebuilt-libraries-dir must be specified'
+        assert self.pyqt_dir, 'pyqt-dir must be specified'
+        assert self.sip_dir, 'sip-dir must be specified'
         assert self.python_dir, 'python-dir must be provided'
         assert self.inno_setup_path, 'inno-setup-path must be provided'
         assert path.isfile(self.qmake_path), 'qmake path does not exist'
         assert path.isdir(self.vc_dir), 'vc directory path does not exist'
         assert self.platform in ['amd64'],\
             f'Platform {self.platform} is not currently supported'
-        assert path.isdir(self.prebuilt_libraries_dir),\
-            'prebuilt libraries directory does not exist'
+        assert path.isdir(self.pyqt_dir),\
+            'pyqt directory does not exist'
+        assert path.isdir(self.sip_dir),\
+            'sip directory does not exist'
         assert path.isdir(self.python_dir), 'python directory could not be found'
         assert path.isfile(self.inno_setup_path), 'inno setup path does not exist'
 
@@ -614,15 +619,14 @@ class CompileCommand(Command):
     def _get_pyqt_lib_paths(self):
         return [
             path.join(
-                self.prebuilt_libraries_dir,
-                'PyQt5_gpl-5.9.1',
+                self.pyqt_dir,
                 q,
                 'release'
             ) for q in self.qt_modules
         ]
 
     def _get_sip_lib_path(self):
-        return path.join(self.prebuilt_libraries_dir, 'sip-4.19.5', 'siplib')
+        return path.join(self.sip_dir, 'siplib')
 
 
     def _exec_build_step(self, build_step):
