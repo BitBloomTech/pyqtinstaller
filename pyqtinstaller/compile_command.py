@@ -225,7 +225,7 @@ class CompileCommand(Command):
         """Runs the command
         Performs the steps required to compile the application and generate an installer
         """
-        sys.stdout.write('{} Building {} version "{}" {}\n'.format('*' * 10, self.app_name, '*' * 10, self._app_version))
+        sys.stdout.write('{} Building {} version "{}" {}\n'.format('*' * 10, self.app_name, self._app_version, '*' * 10))
         # Apply version
         self._apply_version()
         
