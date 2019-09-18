@@ -170,7 +170,6 @@ class CompileCommand(Command):
         assert self.pyqt_dir, 'pyqt-dir must be specified'
         assert self.sip_dir, 'sip-dir must be specified'
         assert self.python_dir, 'python-dir must be provided'
-        assert self.inno_setup_path, 'inno-setup-path must be provided'
         assert path.isfile(self.qmake_path), 'qmake path does not exist'
         assert path.isdir(self.vc_dir), 'vc directory path does not exist'
         assert self.platform in ['amd64'],\
@@ -180,7 +179,6 @@ class CompileCommand(Command):
         assert path.isdir(self.sip_dir),\
             'sip directory does not exist'
         assert path.isdir(self.python_dir), 'python directory could not be found'
-        assert path.isfile(self.inno_setup_path), 'inno setup path does not exist'
 
         # General options
         assert self.qt_modules, 'qt-modules must be specified'
@@ -200,6 +198,10 @@ class CompileCommand(Command):
         self.skip_installer = to_bool(self.skip_installer)
         self.compiled_packages = to_str_list(self.compiled_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
+
+        if not self.skip_installer:
+            assert self.inno_setup_path, 'inno-setup-path must be provided'
+            assert path.isfile(self.inno_setup_path), 'inno setup path does not exist'
 
         self.build_dir = self.build_dir or 'build'
 
