@@ -14,7 +14,7 @@ TRANSLATIONS = {% for t in translation_files %}{{t}}\
         {%- if loop.depth == 1 %}
         <Package name="{{p['name']}}">
         {%- else %}
-            <PackageContent included="1" isdirectory="1" name="{{p['name']}}">
+            <PackageContent included="1" isdirectory="{{"0" if p['name'].endswith('.py') else "1"}}" name="{{p['name']}}">
         {%- endif %}
             {%- set package_loop = loop %}
             {%- for m in p['modules'] %}
@@ -39,7 +39,7 @@ TRANSLATIONS = {% for t in translation_files %}{{t}}\
     {%- if loop.depth == 1 %}
     <Package name="{{p['name']}}">
     {%- else %}
-        <PackageContent included="1" isdirectory="1" name="{{p['name']}}">
+        <PackageContent included="1" isdirectory="{{"0" if p['name'].endswith('.py') else "1"}}" name="{{p['name']}}">
     {%- endif %}
         {%- set package_loop = loop %}
         {%- for m in p['modules'] %}

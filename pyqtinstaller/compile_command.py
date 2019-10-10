@@ -19,6 +19,7 @@
 This module defines the "compile" command, which will compile an installer from a pyqt5 application
 """
 from subprocess import call, check_output
+import re
 import sys
 import os
 from os import path
@@ -122,6 +123,7 @@ class CompileCommand(Command):
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
         ('compiled-packages=', None, 'Packages to compile'),
+        ('ignored-packages=', None, 'Packages to ignore (regex)'),
         ('allow-untagged=', None, 'Allow untagged releases')
     ]
 
@@ -155,6 +157,7 @@ class CompileCommand(Command):
         self.post_build = None
         self.pre_build = None
         self.compiled_packages = None
+        self.ignored_packages = None
         self.allow_untagged = None
 
     def finalize_options(self):
@@ -197,6 +200,7 @@ class CompileCommand(Command):
         self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
         self.compiled_packages = to_str_list(self.compiled_packages)
+        self.ignored_packages = to_str_list(self.ignored_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
 
         if not self.skip_installer:
@@ -262,6 +266,7 @@ class CompileCommand(Command):
 
         # Copy the dlls to the release directory
         self._copy_binaries(vc_env)
+        self._copy_pyd_files()
 
         # Copy the external packages to the release directory
         self._copy_external_packages()
@@ -331,17 +336,19 @@ class CompileCommand(Command):
     def qmake_pro_file(self):
         return path.join(self.build_dir, f'{self._project_name}.pro')
 
+    def _get_compiled_packages(self, include_pyd=False):
+        compiled_packages_dir = self._get_external_package_path(self.compiled_packages)
+        return [{
+            'name': compiled_packages_dir,
+            'packages': [self._get_py_packages(compiled_packages_dir, p, include_pyd) for p in self.compiled_packages],
+            'modules': []
+        }]
 
     def _build_project_file(self):
 
         app_packages = [self._get_py_packages('.', self.package)]
         if self.compiled_packages:
-            compiled_packages_dir = self._get_external_package_path(self.compiled_packages)
-            compiled_packages = [{
-                'name': compiled_packages_dir,
-                'packages': [self._get_py_packages(compiled_packages_dir, p) for p in self.compiled_packages],
-                'modules': []
-            }]
+            compiled_packages = self._get_compiled_packages()
         else:
             compiled_packages = []
 
@@ -378,12 +385,20 @@ class CompileCommand(Command):
         return valid_package_paths[0]
 
 
-    def _get_py_packages(self, base, package):
+    def _get_py_packages(self, base, package, include_pyd=False):
         basepath = path.join(base, package)
-        files = os.listdir(basepath)
-        packages = [self._get_py_packages(basepath, p) for p in files if path.isdir(path.join(basepath, p)) and not p.startswith('__')]
-        modules = [m for m in files if m.endswith('.py')]
-        return {'name': package, 'packages': packages, 'modules': modules}
+        if any(re.search(i, basepath) for i in self.ignored_packages):
+            return None
+        if os.path.isdir(basepath):
+            files = os.listdir(basepath)
+            packages = [self._get_py_packages(basepath, p, include_pyd) for p in files if path.isdir(path.join(basepath, p)) and not p.startswith('__')]
+            modules = [m for m in files if (m.endswith('.py') or (include_pyd and (m.endswith('.pyd') or m.endswith('.dll'))))]
+            return {'name': package, 'packages': [p for p in packages if p], 'modules': modules}
+        elif os.path.isfile(basepath +  '.py'):
+            return {'name': package + '.py', 'packages': [], 'modules': []}
+        elif glob(basepath + '.*.pyd'):
+            return {'name': os.path.basename(glob(basepath + '.*.pyd')[0]), 'packages': [], 'modules': []}
+        raise FileNotFoundError('File or directory not found for package "{}"'.format(package))
 
 
     def _create_app_resources(self):
@@ -479,7 +494,7 @@ class CompileCommand(Command):
 
 
     def _run_pyqtdeploy(self, env):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy'], env=env)
+        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy', '--resources', '10'], env=env)
 
 
     def _run_qmake(self, env):
@@ -580,6 +595,28 @@ class CompileCommand(Command):
         for package in self.external_stdlib_modules:
             if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
                 shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    
+    def _copy_pyd_files(self):
+        root_dir = self._get_external_package_path(self.compiled_packages)
+        for package in self._get_compiled_packages(include_pyd=True):
+            self._copy_pyd_files_for_package(package, root_dir)
+    
+    def _copy_pyd_files_for_package(self, package, root_dir, root_name=None):
+        if 'numpy' == package['name'] or (root_name is not None and 'numpy' in root_name):
+            print(package)
+        if package['name'].endswith('.pyd'):
+            package_name = root_name + '.' + package['name'] if root_name is not None and root_name != root_dir else package['name']
+            dest = path.join(self.output_dir, package_name).replace('.cp36-win32_amd64', '')
+            shutil.copyfile(path.join(root_dir, package['name']), dest)
+        else:
+            root_name = (root_name + '.' + package['name']) if root_name is not None and root_name != root_dir else package['name']
+            for p in package['packages']:
+                self._copy_pyd_files_for_package(p, path.join(root_dir, package['name']), root_name)
+            for m in [m for m in package['modules'] if m.endswith('.pyd') or m.endswith('.dll')]:
+                package_name = root_name + '.' + m if m.endswith('.pyd') else m
+                dest = path.join(self.output_dir, package_name).replace('.cp36-win_amd64', '')
+                shutil.copyfile(path.join(root_dir, package['name'], m), dest)
+
 
     def _get_dll_paths(self):
         pyqt_dlls = [
