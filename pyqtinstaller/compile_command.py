@@ -338,9 +338,16 @@ class CompileCommand(Command):
 
     def _get_compiled_packages(self, include_pyd=False):
         compiled_packages_dir = self._get_external_package_path(self.compiled_packages)
+
+        external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
+
         return [{
             'name': compiled_packages_dir,
             'packages': [self._get_py_packages(compiled_packages_dir, p, include_pyd) for p in self.compiled_packages],
+            'modules': []
+        }, {
+            'name': external_stdlib_path,
+            'packages': [self._get_py_packages(external_stdlib_path, p, include_pyd) for p in self.external_stdlib_modules],
             'modules': []
         }]
 
@@ -590,11 +597,6 @@ class CompileCommand(Command):
             elif glob(path.join(current_path, f'{package}.*.pyd')):
                 compiled_package_binary = glob(path.join(current_path, f'{package}.*.pyd'))[0]
                 shutil.copyfile(compiled_package_binary, path.join(package_dest, path.basename(compiled_package_binary)))
-
-        external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
-        for package in self.external_stdlib_modules:
-            if path.isdir(path.join(external_stdlib_path, package)) and not path.isdir(path.join(package_dest, package)):
-                shutil.copytree(path.join(external_stdlib_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     
     def _copy_pyd_files(self):
         root_dir = self._get_external_package_path(self.compiled_packages)
@@ -614,7 +616,7 @@ class CompileCommand(Command):
                 self._copy_pyd_files_for_package(p, path.join(root_dir, package['name']), root_name)
             for m in [m for m in package['modules'] if m.endswith('.pyd') or m.endswith('.dll')]:
                 package_name = root_name + '.' + m if m.endswith('.pyd') else m
-                dest = path.join(self.output_dir, package_name).replace('.cp36-win_amd64', '')
+                dest = path.join(self.output_dir, package_name).replace('.cp36-win_amd64', '').replace('win32.', '')
                 shutil.copyfile(path.join(root_dir, package['name'], m), dest)
 
 
