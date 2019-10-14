@@ -609,7 +609,7 @@ class CompileCommand(Command):
     def _copy_pyd_files_for_package(self, package, root_dir, root_name=None):
         if package['name'].endswith('.pyd'):
             package_name = root_name + '.' + package['name'] if root_name is not None and root_name != root_dir else package['name']
-            dest = path.join(self.output_dir, package_name).replace('.cp36-win32_amd64', '')
+            dest = path.join(self.output_dir, package_name).replace('.cp36-win_amd64', '')
             shutil.copyfile(path.join(root_dir, package['name']), dest)
         else:
             root_name = (root_name + '.' + package['name']) if root_name is not None and root_name != root_dir else package['name']
