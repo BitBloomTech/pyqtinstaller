@@ -124,7 +124,8 @@ class CompileCommand(Command):
         ('skip-installer=', None, 'Skip the installer'),
         ('compiled-packages=', None, 'Packages to compile'),
         ('ignored-packages=', None, 'Packages to ignore (regex)'),
-        ('allow-untagged=', None, 'Allow untagged releases')
+        ('allow-untagged=', None, 'Allow untagged releases'),
+        ('resource-file-count=', None, 'Number of resource files to generate')
     ]
 
     def initialize_options(self):
@@ -159,6 +160,7 @@ class CompileCommand(Command):
         self.compiled_packages = None
         self.ignored_packages = None
         self.allow_untagged = None
+        self.resource_file_count = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -202,6 +204,7 @@ class CompileCommand(Command):
         self.compiled_packages = to_str_list(self.compiled_packages)
         self.ignored_packages = to_str_list(self.ignored_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
+        self.resource_file_count = self.resource_file_count or '2'
 
         if not self.skip_installer:
             assert self.inno_setup_path, 'inno-setup-path must be provided'
@@ -501,7 +504,7 @@ class CompileCommand(Command):
 
 
     def _run_pyqtdeploy(self, env):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy', '--resources', '10'], env=env)
+        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy', '--resources', self.resource_file_count], env=env)
 
 
     def _run_qmake(self, env):
@@ -604,8 +607,6 @@ class CompileCommand(Command):
             self._copy_pyd_files_for_package(package, root_dir)
     
     def _copy_pyd_files_for_package(self, package, root_dir, root_name=None):
-        if 'numpy' == package['name'] or (root_name is not None and 'numpy' in root_name):
-            print(package)
         if package['name'].endswith('.pyd'):
             package_name = root_name + '.' + package['name'] if root_name is not None and root_name != root_dir else package['name']
             dest = path.join(self.output_dir, package_name).replace('.cp36-win32_amd64', '')
