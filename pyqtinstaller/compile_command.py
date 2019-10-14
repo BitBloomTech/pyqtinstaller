@@ -234,7 +234,7 @@ class CompileCommand(Command):
         """
         sys.stdout.write('{} Building {} version "{}" {}\n'.format('*' * 10, self.app_name, self._app_version, '*' * 10))
         # Apply version
-        self._apply_version()
+        remove_version = self._apply_version()
         
         # Clean the output directory
         self._clean()
@@ -255,7 +255,8 @@ class CompileCommand(Command):
         self._run_pyqtdeploy(vc_env)
 
         # Remove version
-        self._remove_version()
+        if remove_version:
+            self._remove_version()
 
         # Generate translations
         self._generate_ts(vc_env)
@@ -380,8 +381,12 @@ class CompileCommand(Command):
             fp.write(get_template('package.pdy').render(args))
 
     def _apply_version(self):
-        with open(path.join(self.package, '__version__.py'), 'w') as fp:
-            fp.write(f'__version__ = \'{self._app_version}\'')
+        version_file = path.join(self.package, '__version__.py')
+        if not os.path.exists(version_file):
+            with open(version_file, 'w') as fp:
+                fp.write(f'__version__ = \'{self._app_version}\'')
+            return True
+        return False
     
     def _remove_version(self):
         os.remove(path.join(self.package, '__version__.py'))
