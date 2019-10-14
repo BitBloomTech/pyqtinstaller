@@ -276,13 +276,13 @@ class CompileCommand(Command):
 
         if 'QtWebEngine' in self.qt_modules:
             self._copy_qt_web_engine_resources()
+        
+        output_dirs = {}
 
-        if not self.skip_installer:
-            output_dirs = {}
+        for post_build_step in self.post_build:
+            output_dirs = {**output_dirs, **self._exec_build_step(post_build_step)}
 
-            for post_build_step in self.post_build:
-                output_dirs = {**output_dirs, **self._exec_build_step(post_build_step)}
-            
+        if not self.skip_installer:            
             output_dirs = output_dirs or {'': self.output_dir}
 
             for name, output in output_dirs.items():
