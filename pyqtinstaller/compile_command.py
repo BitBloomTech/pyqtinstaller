@@ -500,17 +500,23 @@ class CompileCommand(Command):
             additional_files = output.get('additional_files', [])
             additional_temp_files = output.get('additional_temp_files', [])
             run_commands = output.get('run', [])
+            uninstall_commands = output.get('uninstall', [])
+            uninstall_files = output.get('uninstall_files', [])
         else:
             output_dir = output
             additional_files = []
             run_commands = []
+            uninstall_commands = []
             additional_temp_files = []
+            uninstall_files = []
 
         installer_config = {
             **self.app_config,
             'installer_filename': installer_filename,
             'additional_files': additional_files,
             'run_commands': run_commands,
+            'uninstall_commands': uninstall_commands,
+            'uninstall_files': uninstall_files,
             'external_exe_files': self.external_exe_files,
             'additional_temp_files': additional_temp_files,
             'include_translations': True if self.languages else False

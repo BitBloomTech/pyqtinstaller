@@ -71,6 +71,20 @@ Filename: {tmp}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q 
 Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc['status']}}
 {%- endfor %}
 
+{%- if uninstall_commands %}
+[UninstallRun]
+{%- for rc in uninstall_commands %}
+Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc['status']}}
+{%- endfor %}
+{%- endif %}
+
+{%- if uninstall_files %}
+[UninstallDelete]
+{%- for f in uninstall_files %}
+Type: files; Name: {{f}}
+{%- endfor %}
+{%- endif %}
+
 [Icons]
 Name: "{userdesktop}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; IconFilename: "{app}\{{app_icon}}"; Tasks: desktopicon
 Name: "{group}\{{app_name}}"; Filename: "{app}\{{app_name}}.exe"; WorkingDir: "{app}"; IconFilename: "{app}\{{app_icon}}"; Tasks: startmenuicon
