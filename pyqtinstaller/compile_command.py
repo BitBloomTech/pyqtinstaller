@@ -357,7 +357,8 @@ class CompileCommand(Command):
             'translation_files': self._get_translation_files(),
             'py_packages': app_packages,
             'stdlib_modules': self.stdlib_modules,
-            'compiled_packages': compiled_packages
+            'compiled_packages': compiled_packages,
+            'python_dir': self.python_dir
         }
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
