@@ -46,7 +46,7 @@ jobs:
           name: run licensify
           command: |
             . .venv/bin/activate
-            licensify LICENSE_SHORT --directory pyqtinstaller --files *.py --exclude _version.py --check
+            licensify LICENSE_SHORT --directory pyqtinstaller --files "*.py" --exclude _version.py --check
 
       - save_cache:
           paths:
