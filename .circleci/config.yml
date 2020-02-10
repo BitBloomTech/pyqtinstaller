@@ -41,12 +41,12 @@ jobs:
             . .venv/bin/activate
             pip install .[test,publish]
 
-      # run tests!
+      # run licensify!
       - run:
-          name: run tests
+          name: run licensify
           command: |
             . .venv/bin/activate
-            tox -e py36
+            licensify LICENSE_SHORT --directory pyqtinstaller --files *.py --exclude _version.py --check
 
       - save_cache:
           paths:
