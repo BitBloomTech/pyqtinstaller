@@ -122,7 +122,8 @@ class CompileCommand(Command):
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
         ('compiled-packages=', None, 'Packages to compile'),
-        ('allow-untagged=', None, 'Allow untagged releases')
+        ('allow-untagged=', None, 'Allow untagged releases'),
+        ('signtool=', None, 'Command to use for signing installers')
     ]
 
     def initialize_options(self):
@@ -156,6 +157,7 @@ class CompileCommand(Command):
         self.pre_build = None
         self.compiled_packages = None
         self.allow_untagged = None
+        self.signtool = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -531,6 +533,9 @@ class CompileCommand(Command):
         assert_call([self.inno_setup_path, fp.name])
 
         filename = installer_config['installer_filename'] + '.exe'
+
+        if self.signtool:
+            assert_call(self.signtool + ' ' + path.join(output_dir, filename))
 
         shutil.move(path.join(output_dir, filename), path.join(path.abspath('.'), filename))
 
