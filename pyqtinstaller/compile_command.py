@@ -118,6 +118,7 @@ class CompileCommand(Command):
         ('platform=', None, 'The platform to compile for'),
         ('qt-modules=', None, 'The QT modules to compile'),
         ('package=', None, 'The package to compile'),
+        ('entrypoint=', None, 'The entrypoint, defaults to <package>/__main__.py'),
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
@@ -140,6 +141,7 @@ class CompileCommand(Command):
         self.python_dir = None
         self.inno_setup_path = None
         self.package = None
+        self.entrypoint = None
         self.app_name = None
         self.file_extension = None
         self.app_icon = None
@@ -187,6 +189,7 @@ class CompileCommand(Command):
         assert self.package, 'package must be specified'
         assert self.app_name, 'Must provide an app name'
         assert path.isdir(self.package), 'package not found'
+        assert not self.entrypoint or path.isfile(self.entrypoint), 'entrypoint not found'
         self.resources_dirs = to_str_list(self.resources_dirs)
         self.qt_modules = to_str_list(self.qt_modules)
         self.stdlib_modules = to_str_list(self.stdlib_modules)
@@ -217,7 +220,7 @@ class CompileCommand(Command):
             'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dirs': self.resources_dirs,
-            'package': self.package,
+            'entrypoint': self.entrypoint or f'{self.package}/__main__.py',
             'license_file': self.license_file,
             'file_extension': self.file_extension
         }
