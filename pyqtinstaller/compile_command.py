@@ -57,7 +57,7 @@ def get_vc_bin_dir(vc_dir: str, platform: str):
     return path.join(vc_dir, bin_dir)
 
 
-def get_version(package: str, allow_untagged):
+def get_version(package=None, allow_untagged=False):
     """Gets the version of the package we're building
     """
     package_version = check_output('git describe --tags').decode('utf8').strip()
@@ -67,7 +67,7 @@ def get_version(package: str, allow_untagged):
             # Untagged commits have the pattern <tag>-<distance>-<commit>
             raise ValueError('Untagged version not allowed! Description: {}'.format(package_version))
         return '-'.join(version_parts if len(version_parts) <= 2 else version_parts[:-1])
-    else:
+    elif package:
         exec(f'import {package}') #pylint: disable=exec-used
         package_version = eval(f'{package}.__version__') #pylint: disable=eval-used
 
@@ -79,6 +79,8 @@ def get_version(package: str, allow_untagged):
         else:
             version_parts[-1] = build
         return '-'.join(version_parts)
+    else:
+        raise ValueError('Could not find version - git tagging not used or package is not defined')
 
 
 def get_template(name: str) -> Template:
@@ -104,6 +106,30 @@ def to_str_list(comma_delimited):
 def to_bool(arg):
     return arg.lower() in ['1', 'true', 't', 'yes'] if arg else False
 
+class PackageDef:
+    def __init__(self, package: str,
+            name: str,
+            ext: str = None,
+            entrypoint: str = None,
+            console: bool = False):
+        self.package = package
+        self.name = name
+        self.ext = ext
+        self.entrypoint = entrypoint
+        self.console = console
+
+def to_package_defs(packages, win_console=False):
+    defs = [dict(p.split('=') for p in package.split(',')) for package in packages.split(';')]
+    for definition in defs:
+        assert 'package' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>];[...]'
+        assert 'name' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>];[...]'
+        assert path.isdir(definition['package']), 'Package {} not found'.format(definition['package'])
+        if 'entrypoint' in definition:
+            assert path.isfile(definition['entrypoint']), 'Entrypoint {} not found'.format(definition['entrypoint'])
+        definition['console'] = to_bool(definition.get('console')) or win_console
+
+    return [PackageDef(**d) for d in defs]
+
 class CompileCommand(Command):
     """CompileCommand
     Implements the `Command` interface from `setuptools`
@@ -118,15 +144,17 @@ class CompileCommand(Command):
         ('vc-dir=', None, 'The path the Visual Studio 2015 VC directory'),
         ('platform=', None, 'The platform to compile for'),
         ('qt-modules=', None, 'The QT modules to compile'),
+        ('packages=', None, 'Definitions of the packages to compile'),
         ('package=', None, 'The package to compile'),
         ('entrypoint=', None, 'The entrypoint, defaults to <package>/__main__.py'),
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
+        ('translations=', None, 'Skip the installer'),
         ('compiled-packages=', None, 'Packages to compile'),
         ('ignored-packages=', None, 'Packages to ignore (regex)'),
         ('allow-untagged=', None, 'Allow untagged releases'),
-        ('resource-file-count=', None, 'Number of resource files to generate')
+        ('resource-file-count=', None, 'Number of resource files to generate'),
         ('allow-untagged=', None, 'Allow untagged releases'),
         ('signtool=', None, 'Command to use for signing installers')
     ]
@@ -144,6 +172,7 @@ class CompileCommand(Command):
         self.sip_dir = None
         self.python_dir = None
         self.inno_setup_path = None
+        self.packages = None
         self.package = None
         self.entrypoint = None
         self.app_name = None
@@ -166,6 +195,7 @@ class CompileCommand(Command):
         self.allow_untagged = None
         self.resource_file_count = None
         self.signtool = None
+        self.translations = False
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -192,10 +222,18 @@ class CompileCommand(Command):
 
         # General options
         assert self.qt_modules, 'qt-modules must be specified'
-        assert self.package, 'package must be specified'
-        assert self.app_name, 'Must provide an app name'
-        assert path.isdir(self.package), 'package not found'
-        assert not self.entrypoint or path.isfile(self.entrypoint), 'entrypoint not found'
+
+        self.win_console = to_bool(self.win_console)
+
+        if self.packages:
+            self.packages = to_package_defs(self.packages, self.win_console)
+        else:    
+            assert self.package, 'package must be specified'
+            assert path.isdir(self.package), 'package not found'
+            assert self.app_name, 'Must provide an app name'
+            assert not self.entrypoint or path.isfile(self.entrypoint), 'entrypoint not found'
+            self.packages = [PackageDef(self.package, self.app_name, self.file_extension, self.entrypoint, self.win_console)]
+
         self.resources_dirs = to_str_list(self.resources_dirs)
         self.qt_modules = to_str_list(self.qt_modules)
         self.stdlib_modules = to_str_list(self.stdlib_modules)
@@ -205,12 +243,15 @@ class CompileCommand(Command):
         self.languages = to_str_list(self.languages)
         self.post_build = to_str_list(self.post_build)
         self.pre_build = to_str_list(self.pre_build)
-        self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
         self.compiled_packages = to_str_list(self.compiled_packages)
         self.ignored_packages = to_str_list(self.ignored_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
         self.resource_file_count = self.resource_file_count or '2'
+        self.translations = to_bool(self.translations)
+
+        if self.translations and len(self.packages) > 1:
+            assert False, 'Translations not supported for multiple packages'
 
         if not self.skip_installer:
             assert self.inno_setup_path, 'inno-setup-path must be provided'
@@ -228,7 +269,6 @@ class CompileCommand(Command):
             'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dirs': self.resources_dirs,
-            'entrypoint': self.entrypoint or f'{self.package}/__main__.py',
             'license_file': self.license_file,
             'file_extension': self.file_extension
         }
@@ -239,40 +279,43 @@ class CompileCommand(Command):
         Performs the steps required to compile the application and generate an installer
         """
         sys.stdout.write('{} Building {} version "{}" {}\n'.format('*' * 10, self.app_name, self._app_version, '*' * 10))
-        # Apply version
-        remove_version = self._apply_version()
-        
+
         # Clean the output directory
         self._clean()
 
         # Exec pre build
         for pre_build_step in self.pre_build:
             self._exec_build_step(pre_build_step)
-
-        # Build the package project file
-        self._build_project_file()
-
+        
         # Create the app resources
         self._create_app_resources()
 
         vc_env = self._get_vc_env()
+        
+        for package_def in self.packages:
+            # Apply version
+            remove_version = self._apply_version(package_def)
 
-        # Build the qt project file
-        self._run_pyqtdeploy(vc_env)
+            # Build the package project file
+            self._build_project_file(package_def)
 
-        # Remove version
-        if remove_version:
-            self._remove_version()
+            # Build the qt project file
+            self._run_pyqtdeploy(vc_env, package_def)
 
-        # Generate translations
-        self._generate_ts(vc_env)
-        self._generate_qm(vc_env)
+            # Remove version
+            if remove_version:
+                self._remove_version(package_def)
 
-        # Build the nmake Makefiles
-        self._run_qmake(vc_env)
+            if self.translations:
+                # Generate translations
+                self._generate_ts(vc_env)
+                self._generate_qm(vc_env)
 
-        # Build the exe
-        self._run_nmake(vc_env)
+            # Build the nmake Makefiles
+            self._run_qmake(vc_env, package_def)
+
+            # Build the exe
+            self._run_nmake(vc_env)
 
         # Copy the dlls to the release directory
         self._copy_binaries(vc_env)
@@ -351,6 +394,8 @@ class CompileCommand(Command):
 
         external_stdlib_path = self._get_external_package_path(self.external_stdlib_modules)
 
+        print('external stdlib modules', [self._get_py_packages(external_stdlib_path, p, include_pyd) for p in self.external_stdlib_modules])
+
         return [{
             'name': compiled_packages_dir,
             'packages': [self._get_py_packages(compiled_packages_dir, p, include_pyd) for p in self.compiled_packages],
@@ -361,53 +406,55 @@ class CompileCommand(Command):
             'modules': []
         }]
 
-    def _build_project_file(self):
+    def _build_project_file(self, package_def: PackageDef):
 
-        app_packages = [self._get_py_packages('.', self.package)]
+        app_packages = [self._get_py_packages('.', package_def.package)]
         if self.compiled_packages:
             compiled_packages = self._get_compiled_packages()
         else:
             compiled_packages = []
 
+        project_name = package_def.name.replace(' ', '')
+
         args = {
             **self.app_config,
-            'project_name': self._project_name,
-            'package': self.package,
+            'entrypoint': package_def.entrypoint or f'{package_def.package}/__main__.py',
+            'project_name': project_name,
+            'package': package_def.package,
             'qt_modules': self.qt_modules,
             'build_dir': self.build_dir,
             'python_version': get_python_version(self.python_dir),
             'app_version': self._app_version_short,
-            'win_console': '1' if self.win_console else '0',
+            'win_console': '1' if package_def.console else '0',
             'translation_files': self._get_translation_files(),
             'py_packages': app_packages,
             'stdlib_modules': self.stdlib_modules,
             'compiled_packages': compiled_packages,
-            'python_dir': self.python_dir
+            'python_dir': self.python_dir,
+            'translations': self.translations
         }
-        with open(f'{self._project_name}.pdy', 'w') as fp:
+
+        with open(f'package.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
 
-    def _apply_version(self):
-        version_file = path.join(self.package, '__version__.py')
+    def _apply_version(self, package_def: PackageDef):
+        version_file = path.join(package_def.package, '__version__.py')
         if not os.path.exists(version_file):
             with open(version_file, 'w') as fp:
                 fp.write(f'__version__ = \'{self._app_version}\'')
             return True
         return False
     
-    def _remove_version(self):
-        os.remove(path.join(self.package, '__version__.py'))
+        os.remove(path.join(package_def.package, '__version__.py'))
 
     def _get_external_package_path(self, requires, package_exists=None):
         valid_package_paths = sys.path + ['.']
         package_exists = package_exists or (lambda d, r: path.isdir(path.join(d, r)) or path.isfile(path.join(d, f'{r}.py')) or path.isfile(path.join(d, f'{r}.egg-link')) or glob(path.join(d, f'{r}.*.pyd')))
         for require in requires:
             valid_package_paths = [d for d in valid_package_paths if package_exists(d, require)]
-            assert valid_package_paths, f'No valid package paths found for {require}'
         return valid_package_paths[0]
 
-
-    def _get_py_packages(self, base, package, include_pyd=False):
+    def _get_py_packages(self, base, package, include_pyd=True):
         basepath = path.join(base, package)
         if any(re.search(i, basepath) for i in self.ignored_packages):
             return None
@@ -424,30 +471,13 @@ class CompileCommand(Command):
 
 
     def _create_app_resources(self):
-        app_resource_files = glob(f'{self.package}/**/*.qml', recursive=True)
-        args = {
-            'files': app_resource_files
-        }
-        app_resources_dir = path.join(self.build_dir, 'app_resources')
-        if not path.isdir(app_resources_dir):
-            os.makedirs(app_resources_dir)
-
-        with open(path.join(app_resources_dir, 'app_resources.qrc'), 'w') as fp:
-            fp.write(get_template('resources.qrc').render(args))
-        for resource_file in app_resource_files:
-            dest = path.join(self.build_dir, 'app_resources', resource_file)
-            if not path.isdir(path.dirname(dest)):
-                os.makedirs(path.dirname(dest))
-            shutil.copyfile(resource_file, dest)
-
         for resources_dir in self.resources_dirs:
-            other_resource_files = glob(f'{resources_dir}/**/*', recursive=True)
-            for resource_file in [f for f in other_resource_files if path.isfile(f)]:
+            resource_files = glob(f'{resources_dir}/**/*', recursive=True)
+            for resource_file in [f for f in resource_files if path.isfile(f)]:
                 dest = path.join(self.output_dir, resource_file)
                 if not path.isdir(path.dirname(dest)):
                     os.makedirs(path.dirname(dest))
                 shutil.copyfile(resource_file, dest)
-
 
     def _copy_qt_web_engine_resources(self):
         shutil.copyfile(path.join(self._qt_dir, 'QtWebEngineProcess.exe'), path.join(self.output_dir, 'QtWebEngineProcess.exe'))
@@ -515,12 +545,13 @@ class CompileCommand(Command):
         return vc_env
 
 
-    def _run_pyqtdeploy(self, env):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy', '--resources', self.resource_file_count], env=env)
+    def _run_pyqtdeploy(self, env, package_def: PackageDef):
+        assert_call(['pyqtdeploycli', self.build_dir, '--project', 'package.pdy', '--resources', self.resource_file_count], env=env)
 
 
-    def _run_qmake(self, env):
-        assert_call([self.qmake_path], cwd=self.build_dir, env=env)
+    def _run_qmake(self, env, package_def: PackageDef):
+        project_name = package_def.name.replace(' ', '') + '.pro'
+        assert_call([self.qmake_path, project_name], cwd=self.build_dir, env=env)
 
 
     def _run_nmake(self, env):
@@ -610,17 +641,19 @@ class CompileCommand(Command):
         
 
     def _copy_external_packages(self):
-        external_packages_path = self._get_external_package_path(self.external_packages)
-        package_dest = path.join(self.output_dir, 'packages')
-        for package in self.external_packages:
-            current_path, package = self._resolve_egg_link(external_packages_path, package)
-            if path.isdir(path.join(current_path, package)) and not path.isdir(path.join(package_dest, package)):
-                shutil.copytree(path.join(current_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-            elif path.isfile(path.join(current_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
-                shutil.copyfile(path.join(current_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
-            elif glob(path.join(current_path, f'{package}.*.pyd')):
-                compiled_package_binary = glob(path.join(current_path, f'{package}.*.pyd'))[0]
-                shutil.copyfile(compiled_package_binary, path.join(package_dest, path.basename(compiled_package_binary)))
+        for packages in (self.external_packages, self.external_stdlib_modules):
+            external_packages_path = self._get_external_package_path(packages)
+            package_dest = path.join(self.output_dir, 'packages')
+            for package in packages:
+                current_path, package = self._resolve_egg_link(external_packages_path, package)
+                print('Copying...', path.join(current_path, package))
+                if path.isdir(path.join(current_path, package)) and not path.isdir(path.join(package_dest, package)):
+                    shutil.copytree(path.join(current_path, package), path.join(package_dest, package), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+                elif path.isfile(path.join(current_path, f'{package}.py')) and not path.isfile(path.join(package_dest, f'{package}.py')):
+                    shutil.copyfile(path.join(current_path, f'{package}.py'), path.join(package_dest, f'{package}.py'))
+                elif glob(path.join(current_path, f'{package}.*.pyd')):
+                    compiled_package_binary = glob(path.join(current_path, f'{package}.*.pyd'))[0]
+                    shutil.copyfile(compiled_package_binary, path.join(package_dest, path.basename(compiled_package_binary)))
     
     def _copy_pyd_files(self):
         root_dir = self._get_external_package_path(self.compiled_packages)
