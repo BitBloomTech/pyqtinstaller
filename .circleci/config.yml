@@ -41,12 +41,12 @@ jobs:
             . .venv/bin/activate
             pip install .[test,publish]
 
-      # run tests!
+      # run licensify!
       - run:
-          name: run tests
+          name: run licensify
           command: |
             . .venv/bin/activate
-            tox -e py36
+            licensify LICENSE_SHORT --directory pyqtinstaller --files "*.py" --exclude _version.py --check
 
       - save_cache:
           paths:
@@ -54,19 +54,6 @@ jobs:
             - ./.tox
             - .coverage
           key: v1-dependencies-{{ checksum "setup.py" }}
-
-      - run:
-          name: Generate reports
-          command: |
-            . .venv/bin/activate
-            coverage report
-            mkdir test-reports
-            mkdir test-reports/coverage
-            coverage html -d test-reports/coverage
-
-      - store_artifacts:
-          path: test-reports
-          destination: test-reports
 
   deploy:
     docker:

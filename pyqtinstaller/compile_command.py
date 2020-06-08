@@ -119,6 +119,7 @@ class CompileCommand(Command):
         ('platform=', None, 'The platform to compile for'),
         ('qt-modules=', None, 'The QT modules to compile'),
         ('package=', None, 'The package to compile'),
+        ('entrypoint=', None, 'The entrypoint, defaults to <package>/__main__.py'),
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
@@ -126,6 +127,8 @@ class CompileCommand(Command):
         ('ignored-packages=', None, 'Packages to ignore (regex)'),
         ('allow-untagged=', None, 'Allow untagged releases'),
         ('resource-file-count=', None, 'Number of resource files to generate')
+        ('allow-untagged=', None, 'Allow untagged releases'),
+        ('signtool=', None, 'Command to use for signing installers')
     ]
 
     def initialize_options(self):
@@ -142,6 +145,7 @@ class CompileCommand(Command):
         self.python_dir = None
         self.inno_setup_path = None
         self.package = None
+        self.entrypoint = None
         self.app_name = None
         self.file_extension = None
         self.app_icon = None
@@ -161,6 +165,7 @@ class CompileCommand(Command):
         self.ignored_packages = None
         self.allow_untagged = None
         self.resource_file_count = None
+        self.signtool = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -190,6 +195,7 @@ class CompileCommand(Command):
         assert self.package, 'package must be specified'
         assert self.app_name, 'Must provide an app name'
         assert path.isdir(self.package), 'package not found'
+        assert not self.entrypoint or path.isfile(self.entrypoint), 'entrypoint not found'
         self.resources_dirs = to_str_list(self.resources_dirs)
         self.qt_modules = to_str_list(self.qt_modules)
         self.stdlib_modules = to_str_list(self.stdlib_modules)
@@ -222,7 +228,7 @@ class CompileCommand(Command):
             'app_name': self.app_name,
             'app_icon': self.app_icon,
             'resources_dirs': self.resources_dirs,
-            'package': self.package,
+            'entrypoint': self.entrypoint or f'{self.package}/__main__.py',
             'license_file': self.license_file,
             'file_extension': self.file_extension
         }
@@ -375,7 +381,8 @@ class CompileCommand(Command):
             'translation_files': self._get_translation_files(),
             'py_packages': app_packages,
             'stdlib_modules': self.stdlib_modules,
-            'compiled_packages': compiled_packages
+            'compiled_packages': compiled_packages,
+            'python_dir': self.python_dir
         }
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
@@ -530,17 +537,23 @@ class CompileCommand(Command):
             additional_files = output.get('additional_files', [])
             additional_temp_files = output.get('additional_temp_files', [])
             run_commands = output.get('run', [])
+            uninstall_commands = output.get('uninstall', [])
+            uninstall_files = output.get('uninstall_files', [])
         else:
             output_dir = output
             additional_files = []
             run_commands = []
+            uninstall_commands = []
             additional_temp_files = []
+            uninstall_files = []
 
         installer_config = {
             **self.app_config,
             'installer_filename': installer_filename,
             'additional_files': additional_files,
             'run_commands': run_commands,
+            'uninstall_commands': uninstall_commands,
+            'uninstall_files': uninstall_files,
             'external_exe_files': self.external_exe_files,
             'additional_temp_files': additional_temp_files,
             'include_translations': True if self.languages else False
@@ -554,6 +567,9 @@ class CompileCommand(Command):
         assert_call([self.inno_setup_path, fp.name])
 
         filename = installer_config['installer_filename'] + '.exe'
+
+        if self.signtool:
+            assert_call(self.signtool + ' ' + path.join(output_dir, filename))
 
         shutil.move(path.join(output_dir, filename), path.join(path.abspath('.'), filename))
 

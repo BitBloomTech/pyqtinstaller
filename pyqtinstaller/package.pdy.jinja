@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <Project version="6">
-    <Python hostinterpreter="$PYTHON_DIR\python.exe" major="{{python_version['major']}}" minor="{{python_version['minor']}}" patch="{{python_version['patch']}}" platformpython="win32" sourcedir="$SYSROOT/src/Python-{{python_version['major']}}.{{python_version['minor']}}.{{python_version['patch']}}" ssl="0" targetincludedir="$PYTHON_DIR\Include" targetlibrary="$PYTHON_DIR\libs\python36.lib" targetstdlibdir="$PYTHON_DIR\Lib" />
-    <Application entrypoint="" isbundle="1" isconsole="{{win_console}}" ispyqt5="1" name="{{project_name}}" script="{{package}}\__main__.py" syspath="">
+    <Python hostinterpreter="{{python_dir}}\python.exe" major="{{python_version['major']}}" minor="{{python_version['minor']}}" patch="{{python_version['patch']}}" platformpython="win32" sourcedir="$SYSROOT/src/Python-{{python_version['major']}}.{{python_version['minor']}}.{{python_version['patch']}}" ssl="0" targetincludedir="$PYTHON_DIR\Include" targetlibrary="$PYTHON_DIR\libs\python36.lib" targetstdlibdir="$PYTHON_DIR\Lib" />
+    <Application entrypoint="" isbundle="1" isconsole="{{win_console}}" ispyqt5="1" name="{{project_name}}" script="{{entrypoint}}" syspath="">
         <QMakeConfiguration>VERSION = {{app_version}}
 RESOURCES += app_resources/app_resources.qrc
 CONFIG += qtquickcompiler
