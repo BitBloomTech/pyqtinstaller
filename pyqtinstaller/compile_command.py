@@ -111,18 +111,20 @@ class PackageDef:
             name: str,
             ext: str = None,
             entrypoint: str = None,
-            console: bool = False):
+            console: bool = False,
+            opt: str = '2'):
         self.package = package
         self.name = name
         self.ext = ext
         self.entrypoint = entrypoint
         self.console = console
+        self.opt = opt
 
 def to_package_defs(packages, win_console=False):
     defs = [dict(p.split('=') for p in package.split(',')) for package in packages.split(';')]
     for definition in defs:
-        assert 'package' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>];[...]'
-        assert 'name' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>];[...]'
+        assert 'package' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>,opt=<1|2|3>];[...]'
+        assert 'name' in definition, 'Package definition should be format "package=<package>,name=<name>[,ext=<ext>,entrypoint=<entrypoint>,opt=<1|2|3>];[...]'
         assert path.isdir(definition['package']), 'Package {} not found'.format(definition['package'])
         if 'entrypoint' in definition:
             assert path.isfile(definition['entrypoint']), 'Entrypoint {} not found'.format(definition['entrypoint'])
@@ -461,7 +463,7 @@ class CompileCommand(Command):
         if os.path.isdir(basepath):
             files = os.listdir(basepath)
             packages = [self._get_py_packages(basepath, p, include_pyd) for p in files if path.isdir(path.join(basepath, p)) and not p.startswith('__')]
-            modules = [m for m in files if (m.endswith('.py') or (include_pyd and (m.endswith('.pyd') or m.endswith('.dll'))))]
+            modules = [m for m in files if (m.endswith('.py') or m.endswith('.json') or (include_pyd and (m.endswith('.pyd') or m.endswith('.dll'))))]
             return {'name': package, 'packages': [p for p in packages if p], 'modules': modules}
         elif os.path.isfile(basepath +  '.py'):
             return {'name': package + '.py', 'packages': [], 'modules': []}
@@ -546,7 +548,7 @@ class CompileCommand(Command):
 
 
     def _run_pyqtdeploy(self, env, package_def: PackageDef):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', 'package.pdy', '--resources', self.resource_file_count], env=env)
+        assert_call(['pyqtdeploycli', self.build_dir, '--project', 'package.pdy', '--resources', self.resource_file_count, '--opt', package_def.opt], env=env)
 
 
     def _run_qmake(self, env, package_def: PackageDef):
