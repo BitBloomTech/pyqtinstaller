@@ -32,6 +32,9 @@ ArchitecturesInstallIn64BitMode=x64
 CreateStartMenuIcon=Create a &start menu icon
 InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\packages"
+
 [Files]
 ; App Files
 Source: "{{app_name.replace(' ', '')}}.exe"; DestDir: "{app}"
