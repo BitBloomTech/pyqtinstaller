@@ -34,6 +34,8 @@ InstallingVCRedist=Installing VC++ 2015 Redistributables...
 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\packages"
+Type: files; Name: "{app}\{{app_name}}.exe"
+Type: files; Name: "{app}\*.dll"
 
 [Files]
 ; App Files

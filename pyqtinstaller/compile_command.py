@@ -122,9 +122,12 @@ class CompileCommand(Command):
         ('inno-setup-path=', None, 'The path to inno setup'),
         ('win-console=', None, 'Whether or not the resulting application should use the console'),
         ('skip-installer=', None, 'Skip the installer'),
+        ('skip-post-build=', None, 'Skip the post build step'),
         ('compiled-packages=', None, 'Packages to compile'),
         ('allow-untagged=', None, 'Allow untagged releases'),
-        ('signtool=', None, 'Command to use for signing installers')
+        ('signtool=', None, 'Command to use for signing installers'),
+        ('additional-libs=', None, 'Additional library files to compile'),
+        ('source-files=', None, 'Source files')
     ]
 
     def initialize_options(self):
@@ -155,11 +158,14 @@ class CompileCommand(Command):
         self.stdlib_binaries = None
         self.external_packages = None
         self.skip_installer = False
+        self.skip_post_build = False
         self.post_build = None
         self.pre_build = None
         self.compiled_packages = None
         self.allow_untagged = None
         self.signtool = None
+        self.additional_libs = None
+        self.source_files = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -201,8 +207,12 @@ class CompileCommand(Command):
         self.pre_build = to_str_list(self.pre_build)
         self.win_console = to_bool(self.win_console)
         self.skip_installer = to_bool(self.skip_installer)
+        self.skip_post_build = to_bool(self.skip_post_build)
         self.compiled_packages = to_str_list(self.compiled_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
+        self.additional_libs = to_str_list(self.additional_libs)
+        if self.source_files:
+            self.source_files = {source: dest for source, dest in [f.split(':') for f in self.source_files.split(',')]}
 
         if not self.skip_installer:
             assert self.inno_setup_path, 'inno-setup-path must be provided'
@@ -262,6 +272,9 @@ class CompileCommand(Command):
         # Build the nmake Makefiles
         self._run_qmake(vc_env)
 
+        # Update source_files
+        self._update_source_files()
+
         # Build the exe
         self._run_nmake(vc_env)
 
@@ -274,14 +287,15 @@ class CompileCommand(Command):
         if 'QtWebEngine' in self.qt_modules:
             self._copy_qt_web_engine_resources()
 
-        if not self.skip_installer:
-            output_dirs = {}
+        output_dirs = {}
 
+        if not self.skip_post_build:
             for post_build_step in self.post_build:
                 output_dirs = {**output_dirs, **self._exec_build_step(post_build_step)}
-            
+
             output_dirs = output_dirs or {'': self.output_dir}
 
+        if not self.skip_installer:
             for name, output in output_dirs.items():
                 self._build_installer(name, output)
 
@@ -336,6 +350,10 @@ class CompileCommand(Command):
     def qmake_pro_file(self):
         return path.join(self.build_dir, f'{self._project_name}.pro')
 
+    def _update_source_files(self):
+        if self.source_files:
+            for source, dest in self.source_files.items():
+                shutil.copyfile(source, path.join(self.build_dir, dest))
 
     def _build_project_file(self):
 
@@ -363,7 +381,8 @@ class CompileCommand(Command):
             'py_packages': app_packages,
             'stdlib_modules': self.stdlib_modules,
             'compiled_packages': compiled_packages,
-            'python_dir': self.python_dir
+            'python_dir': self.python_dir,
+            'additional_libs': self.additional_libs
         }
         with open(f'{self._project_name}.pdy', 'w') as fp:
             fp.write(get_template('package.pdy').render(args))
@@ -485,7 +504,7 @@ class CompileCommand(Command):
 
 
     def _run_pyqtdeploy(self, env):
-        assert_call(['pyqtdeploycli', self.build_dir, '--project', f'{self._project_name}.pdy'], env=env)
+        assert_call(['pyqtdeploycli', 'build', '--output', self.build_dir, '--project', f'{self._project_name}.pdy'], env=env)
 
 
     def _run_qmake(self, env):

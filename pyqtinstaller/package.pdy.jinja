@@ -5,6 +5,11 @@
         <QMakeConfiguration>VERSION = {{app_version}}
 RESOURCES += app_resources/app_resources.qrc
 CONFIG += qtquickcompiler
+{%- if additional_libs %}
+{%- for l in additional_libs %}
+LIBS += "{{ l }}"
+{%- endfor %}
+{%- endif %}
 {%- if app_icon %}
 RC_ICONS = release/{{app_icon}}
 {%- endif %}
