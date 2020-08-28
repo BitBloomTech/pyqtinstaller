@@ -71,7 +71,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: {tmp}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}
+Filename: {tmp}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}; Check: not VCInstalled
 {%- for rc in run_commands %}
 Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc['status']}}
 {%- endfor %}
@@ -100,3 +100,14 @@ Root: HKCR; Subkey: ".{{file_extension}}"; ValueData: "{{app_name}}"; Flags: uni
 Root: HKCR; Subkey: "{{app_name}}"; ValueData: "{{app_name}}"; Flags: uninsdeletekey; ValueType: string; ValueName: ""
 Root: HKCR; Subkey: "{{app_name}}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{{app_name}}.exe,0";
 Root: HKCR; Subkey: "{{app_name}}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{{app_name}}.exe"" ""%1"""
+
+[Code]
+function VCInstalled: Boolean;
+var
+    installed_version, key: String;
+begin
+    Result := False;
+    key := 'SOFTWARE\WOW6432Node\Microsoft\DevDiv\vc\Servicing\14.0\RuntimeMinimum';
+    if RegQueryStringValue(HKEY_LOCAL_MACHINE, key , 'Version', installed_version) then
+        Result := True
+end;
