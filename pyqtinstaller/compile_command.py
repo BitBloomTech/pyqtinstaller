@@ -44,7 +44,7 @@ def get_vc_env(vc_dir: str, platform: str):
     vcvars = check_output(['cmd', '/c', f'vcvarsall.bat {platform}&set'], cwd=vc_dir).decode('utf8')
     vc_env = {}
     for line in vcvars.splitlines():
-        name, value = line.split('=')
+        name, value = line.split('=', 1)
         vc_env[name.upper()] = value
     vc_env['PATH'] = '{};{}'.format(get_vc_bin_dir(vc_dir, platform), vc_env['PATH'])
     return vc_env
