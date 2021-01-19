@@ -60,7 +60,7 @@ Source: packages\*; DestDir: "{app}\packages"; Flags: recursesubdirs
 Source: {{f}}; DestDir: {app}
 {%- endfor %}
 ; Temp Files
-Source: vcredist_x64.exe; DestDir: {tmp}
+Source: {{vc_redist}}; DestDir: {tmp}
 ; Additional temp files
 {%- for f in additional_temp_files %}
 Source: {{f}}; DestDir: {tmp}
@@ -71,7 +71,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: {tmp}\vcredist_x64.exe; Parameters: "/q /passive /Q:a /c:""msiexec /q /i vcredist.msi"""; StatusMsg: {cm:InstallingVCRedist}; Check: not VCInstalled
+Filename: {tmp}\{{vc_redist}}; Parameters: "/quiet /install /norestart"; StatusMsg: {cm:InstallingVCRedist}
 {%- for rc in run_commands %}
 Filename: {{rc['command']}}; Parameters: "{{rc['parameters']}}"; StatusMsg: {{rc['status']}}
 {%- endfor %}

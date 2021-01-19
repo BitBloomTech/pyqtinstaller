@@ -127,7 +127,8 @@ class CompileCommand(Command):
         ('allow-untagged=', None, 'Allow untagged releases'),
         ('signtool=', None, 'Command to use for signing installers'),
         ('additional-libs=', None, 'Additional library files to compile'),
-        ('source-files=', None, 'Source files')
+        ('source-files=', None, 'Source files'),
+        ('vc-redist=', None, 'VC Redist location')
     ]
 
     def initialize_options(self):
@@ -166,6 +167,7 @@ class CompileCommand(Command):
         self.signtool = None
         self.additional_libs = None
         self.source_files = None
+        self.vc_redist = None
 
     def finalize_options(self):
         """Implentation of `Command` finalize_options
@@ -211,6 +213,7 @@ class CompileCommand(Command):
         self.compiled_packages = to_str_list(self.compiled_packages)
         self.allow_untagged = to_bool(self.allow_untagged)
         self.additional_libs = to_str_list(self.additional_libs)
+        assert not self.vc_redist or path.isfile(self.vc_redist)
         if self.source_files:
             self.source_files = {source: dest for source, dest in [f.split(':') for f in self.source_files.split(',')]}
 
@@ -232,7 +235,8 @@ class CompileCommand(Command):
             'resources_dirs': self.resources_dirs,
             'entrypoint': self.entrypoint or f'{self.package}/__main__.py',
             'license_file': self.license_file,
-            'file_extension': self.file_extension
+            'file_extension': self.file_extension,
+            'vc_redist': path.basename(self.vc_redist) if self.vc_redist else 'vcredist_x64.exe'
         }
 
 
@@ -584,10 +588,18 @@ class CompileCommand(Command):
         app_binary = path.join(self.output_dir, f'{self._project_name}.exe')
         assert_call([
             path.join(self._qt_dir, 'windeployqt'),
-            '--release',
+            '--release'
+        ] + (['--no-compiler-runtime'] if self.vc_redist else []) + [
             app_binary
         ], env=env)
-    
+
+        # Copy vc_redist if required
+        if self.vc_redist:
+            shutil.copyfile(
+                self.vc_redist,
+                path.join(self.output_dir, path.basename(self.vc_redist))
+            )
+
     def _resolve_egg_link(self, external_packages_path, package):
         if not path.isfile(path.join(external_packages_path, package + '.egg-link')):
             return external_packages_path, package
